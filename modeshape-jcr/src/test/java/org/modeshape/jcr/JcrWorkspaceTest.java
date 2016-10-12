@@ -512,18 +512,18 @@ public class JcrWorkspaceTest extends SingleUseAbstractTest {
         assertEquals(folder2.getIdentifier(), otherFolder2.getIdentifier());
         assertEquals(folder2CreatedTs, otherFolder2.getProperty("jcr:created").getDate().getTimeInMillis());
     }
-  
+
     @Test
     @FixFor( "MODE-2456")
     public void copyingShouldKeepCorrectACLCount() throws Exception {
         AccessControlManager accessControlManager = session.getAccessControlManager();
-        
+
         session.getRootNode().addNode("aclNode");
         AccessControlList acl = acl("/aclNode");
         acl.addAccessControlEntry(SimplePrincipal.EVERYONE, new Privilege[] {accessControlManager.privilegeFromName(Privilege.JCR_ALL)});
         accessControlManager.setPolicy("/aclNode", acl);
         session.save();
-        
+
         assertTrue(repository().repositoryCache().isAccessControlEnabled());
 
         // copy the node and check that the ACLs were copied
@@ -532,11 +532,11 @@ public class JcrWorkspaceTest extends SingleUseAbstractTest {
         Privilege[] privileges = accessControlManager.getPrivileges("/aclNodeCopy");
         assertEquals(1, privileges.length);
         assertEquals("jcr:all", privileges[0].getName());
-        
+
         // remove the ACLs from the copied node and check that the original ACLs are unaffected
         accessControlManager.removePolicy("/aclNodeCopy", null);
         session.save();
-        
+
         assertEquals(0, accessControlManager.getPolicies("/aclNodeCopy").length);
         assertEquals(1, accessControlManager.getPrivileges("/aclNode").length);
         assertTrue("ACLs should not be disabled", repository().repositoryCache().isAccessControlEnabled());
@@ -546,34 +546,34 @@ public class JcrWorkspaceTest extends SingleUseAbstractTest {
         session.save();
         assertFalse("ACLs should be disabled", repository().repositoryCache().isAccessControlEnabled());
     }
-   
+
     @Test
     @FixFor( "MODE-2456")
     public void cloningShouldKeepCorrectACLCount() throws Exception {
         AccessControlManager accessControlManager = session.getAccessControlManager();
-        
+
         session.getRootNode().addNode("aclNode");
         AccessControlList acl = acl("/aclNode");
         acl.addAccessControlEntry(SimplePrincipal.EVERYONE, new Privilege[] { accessControlManager.privilegeFromName(
                 Privilege.JCR_ALL) });
         accessControlManager.setPolicy("/aclNode", acl);
         session.save();
-        
+
         assertTrue(repository().repositoryCache().isAccessControlEnabled());
 
         // clone the node into another workspace
         otherWorkspace.clone(workspaceName, "/aclNode", "/aclNodeClone", false);
         AccessControlManager otherAccessControlManager = otherSession.getAccessControlManager();
-        
+
         assertEquals(1, otherAccessControlManager.getPolicies("/aclNodeClone").length);
         Privilege[] privileges = otherAccessControlManager.getPrivileges("/aclNodeClone");
         assertEquals(1, privileges.length);
         assertEquals("jcr:all", privileges[0].getName());
-        
+
         // remove the ACLs from the copied node and check that the original ACLs are unaffected
         otherAccessControlManager.removePolicy("/aclNodeClone", null);
         otherSession.save();
-        
+
         assertEquals(0, otherAccessControlManager.getPolicies("/aclNodeClone").length);
         assertEquals(1, accessControlManager.getPrivileges("/aclNode").length);
         assertTrue("ACLs should not be disabled", repository().repositoryCache().isAccessControlEnabled());
@@ -633,7 +633,7 @@ public class JcrWorkspaceTest extends SingleUseAbstractTest {
         otherWorkspace.clone(workspaceName, "/lockable", "/lockable_clone", false);
         assertNotNull(otherSession.getNode("/lockable_clone"));
     }
-    
+
     @SkipLongRunning
     @FixFor( "MODE-2012" )
     @Test
@@ -802,6 +802,37 @@ public class JcrWorkspaceTest extends SingleUseAbstractTest {
         sessionB.logout();
         sessionC.logout();
 
+    }
+
+    @Test
+    public void copyNodeWithEmptyMultiValueProperty() throws Exception {
+        // start a repository with some indexes
+        String configuration =
+                "{\"indexProviders\": {\n" +
+                "    \"local\": {\n" +
+                "      \"classname\": \"org.modeshape.jcr.index.local.LocalIndexProvider\",\n" +
+                "      \"directory\": \"target/1234/indexes\"\n" +
+                "    }\n" +
+                "  },\n" +
+                "  \"indexes\": {\n" +
+                "    \"nodeTypes\": {\n" +
+                "      \"kind\": \"nodeType\",\n" +
+                "      \"provider\": \"local\",\n" +
+                "      \"synchronous\": \"true\",\n" +
+                "      \"nodeType\": \"nt:base\",\n" +
+                "      \"columns\": \"jcr:primaryType(STRING)\"\n" +
+                "    }}}";
+        startRepositoryWithConfiguration(configuration);
+        session.getRootNode().addNode("a");
+        Node node = session.getNode("/a");
+        node.addMixin("mix:referenceable");
+        session.save();
+        node.removeMixin("mix:referenceable");
+        session.save();
+        assertTrue(node.hasProperty("jcr:mixinTypes"));
+        assertThat(node.getProperty("jcr:mixinTypes").getValues().length, is(0));
+        session.getWorkspace().copy(session.getNode("/a").getPath(), "/a2");
+        session.save();
     }
 
     protected void checkCorrespondingPaths( String workspace,
