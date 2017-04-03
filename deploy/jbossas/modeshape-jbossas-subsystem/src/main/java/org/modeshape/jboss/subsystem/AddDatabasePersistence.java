@@ -24,6 +24,7 @@ import static org.modeshape.jboss.subsystem.ModelAttributes.FETCH_SIZE;
 import static org.modeshape.jboss.subsystem.ModelAttributes.PASSWORD;
 import static org.modeshape.jboss.subsystem.ModelAttributes.PERSISTENCE_DS_JNDI_NAME;
 import static org.modeshape.jboss.subsystem.ModelAttributes.POOL_SIZE;
+import static org.modeshape.jboss.subsystem.ModelAttributes.TABLE_NAME;
 import static org.modeshape.jboss.subsystem.ModelAttributes.USERNAME;
 import org.jboss.as.controller.AbstractAddStepHandler;
 import org.jboss.as.controller.AttributeDefinition;
@@ -31,6 +32,7 @@ import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
+import org.jboss.dmr.Property;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceTarget;
@@ -71,6 +73,10 @@ public class AddDatabasePersistence extends AbstractAddStepHandler {
         // Record the properties ...
         EditableDocument persistenceConfig = DocumentFactory.newDocument();
         persistenceConfig.setString(FieldName.TYPE, RelationalDbConfig.ALIAS1);
+        ModelNode tableName = TABLE_NAME.resolveModelAttribute(context, operation);
+        if (tableName.isDefined()) {
+            persistenceConfig.setString(TABLE_NAME.getFieldName(), tableName.asString());
+        }
         ModelNode createOnStart = CREATE_ON_START.resolveModelAttribute(context, operation);
         if (createOnStart.isDefined()) {
             persistenceConfig.setBoolean(CREATE_ON_START.getFieldName(), createOnStart.asBoolean());
@@ -110,6 +116,11 @@ public class AddDatabasePersistence extends AbstractAddStepHandler {
         ModelNode poolSize = POOL_SIZE.resolveModelAttribute(context, operation);
         if (poolSize.isDefined()) {
             persistenceConfig.setNumber(POOL_SIZE.getFieldName(), poolSize.asInt());
+        }
+        if (operation.hasDefined(ModelKeys.PROPERTIES)) {
+            for (Property property : operation.get(ModelKeys.PROPERTIES).asPropertyList()) {
+                persistenceConfig.set(property.getName(), property.getValue().asString());
+            }
         }
 
         PersistenceService persistenceService = new PersistenceService(repositoryName, persistenceConfig);

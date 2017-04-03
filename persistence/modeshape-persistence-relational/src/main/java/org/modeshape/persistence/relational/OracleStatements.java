@@ -15,10 +15,7 @@
  */
 package org.modeshape.persistence.relational;
 
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,36 +26,18 @@ import java.util.Map;
  */
 public class OracleStatements extends DefaultStatements {
 
-    private static final List<Integer> IGNORABLE_ERROR_CODES = Arrays.asList(942, 955);
-    
     protected OracleStatements( RelationalDbConfig config, Map<String, String> statements ) {
         super(config, statements);
     }
-
+    
     @Override
-    public Void createTable( Connection connection ) throws SQLException {
-        try {
-            return super.createTable(connection);
-        } catch (SQLException e) {
-            int errorCode = e.getErrorCode();
-            if (IGNORABLE_ERROR_CODES.contains(errorCode)) {
-                logger.debug(e, "Ignoring Oracle SQL exception for database {0} with error code {1}", tableName(), errorCode);
-                return null;
-            }
-            throw e;
-        }
-    }
-
-    @Override
-    public Void dropTable( Connection connection ) throws SQLException {
-        try {
-            return super.dropTable(connection);
-        } catch (SQLException e) {
-            int errorCode = e.getErrorCode();
-            if (IGNORABLE_ERROR_CODES.contains(e.getErrorCode())) {
-                logger.debug(e, "Ignoring Oracle SQL exception for database {0} with error code {1}", tableName(), errorCode);
-                return null;
-            }
+    protected void processSQLException(String statementId, SQLException e) throws SQLException {
+        int errorCode = e.getErrorCode();
+        if (errorCode == 955 && CREATE_TABLE.equals(statementId)) {
+            logTableInfo("Table {0} already exists");         
+        } else if (errorCode == 942 && DELETE_TABLE.equals(statementId)) {
+            logTableInfo("Table {0} does not exist");            
+        } else {
             throw e;
         }
     }

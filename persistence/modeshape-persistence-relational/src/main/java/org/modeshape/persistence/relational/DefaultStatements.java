@@ -24,6 +24,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -66,6 +67,8 @@ public class DefaultStatements implements Statements {
             } else {
                 logTableInfo("Table {0} already exists");
             }
+        } catch (SQLException e) {
+            processSQLException(CREATE_TABLE, e);
         }
         return null;
     }
@@ -79,8 +82,15 @@ public class DefaultStatements implements Statements {
             } else {
                 logTableInfo("Table {0} does not exist");
             }
+        } catch (SQLException e) {
+            processSQLException(DELETE_TABLE, e);
         }
         return null;
+    }
+    
+    protected void processSQLException(String statementId, SQLException e) throws SQLException {
+        // by default we just rethrow the exception as-is, but certain subclasses may want different handling
+        throw e;
     }
 
     @Override
@@ -115,7 +125,7 @@ public class DefaultStatements implements Statements {
     }
     
     @Override
-    public <R> List<R> load( Connection connection, List<String> ids, Function<Document, R> parser ) throws SQLException {
+    public <R> List<R> load(Connection connection, Collection<String> ids, Function<Document, R> parser) throws SQLException {
         if (logger.isDebugEnabled()) {
             logger.debug("Loading ids {0} from {1}", ids.toString(), tableName());
         }

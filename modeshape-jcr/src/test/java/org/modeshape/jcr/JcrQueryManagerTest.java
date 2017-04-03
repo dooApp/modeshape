@@ -120,7 +120,7 @@ import org.modeshape.jcr.value.Path.Segment;
 public class JcrQueryManagerTest extends MultiUseAbstractTest {
 
     private static final String[] INDEXED_SYSTEM_NODES_PATHS = new String[] {"/jcr:system/jcr:nodeTypes",
-        "/jcr:system/mode:namespaces", "/jcr:system/mode:repository"};
+        "/jcr:system/mode:namespaces"};
 
     /** The total number of nodes excluding '/jcr:system' */
     protected static final int TOTAL_NON_SYSTEM_NODE_COUNT = 25;
@@ -5047,6 +5047,30 @@ public class JcrQueryManagerTest extends MultiUseAbstractTest {
             testRoot.remove();
             session.save();
         }
+    }
+    
+    @FixFor( "MODE-2666" )
+    @Test
+    public void shouldBeAbleToOrderByTheSameColumnRepeatedly() throws RepositoryException {
+        String sql = "SELECT [jcr:name] FROM [nt:base] ORDER BY [jcr:name], [jcr:name]";
+        Query query = session.getWorkspace().getQueryManager().createQuery(sql, Query.JCR_SQL2);
+        QueryResult result = query.execute();
+        validateQuery().rowCount(totalNodeCount).noWarnings().validate(query, result);
+
+        sql = "SELECT [jcr:name] FROM [nt:base] ORDER BY [jcr:name], [jcr:name], [jcr:name]";
+        query = session.getWorkspace().getQueryManager().createQuery(sql, Query.JCR_SQL2);
+        result = query.execute();
+        validateQuery().rowCount(totalNodeCount).noWarnings().validate(query, result);
+    
+        sql = "SELECT [jcr:name] FROM [nt:base] ORDER BY [jcr:name], [jcr:name], [jcr:name], [jcr:name]";
+        query = session.getWorkspace().getQueryManager().createQuery(sql, Query.JCR_SQL2);
+        result = query.execute();
+        validateQuery().rowCount(totalNodeCount).noWarnings().validate(query, result);    
+        
+        sql = "SELECT [jcr:name] FROM [nt:base] ORDER BY [jcr:name], [jcr:name], [jcr:name], [jcr:name], [jcr:name]";
+        query = session.getWorkspace().getQueryManager().createQuery(sql, Query.JCR_SQL2);
+        result = query.execute();
+        validateQuery().rowCount(totalNodeCount).noWarnings().validate(query, result);
     }
 
     private void registerNodeType( String typeName ) throws RepositoryException {

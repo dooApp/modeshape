@@ -60,6 +60,8 @@ import javax.jcr.security.AccessControlManager;
 import javax.jcr.version.Version;
 import javax.jcr.version.VersionException;
 import javax.jcr.version.VersionIterator;
+import javax.transaction.SystemException;
+import org.modeshape.common.SystemFailureException;
 import org.modeshape.common.i18n.I18n;
 import org.modeshape.common.logging.Logger;
 import org.modeshape.common.text.TextDecoder;
@@ -1176,9 +1178,7 @@ public class JcrSession implements org.modeshape.jcr.api.Session {
         try {
             cache().save(systemContent.cache(),
                          new JcrPreSave(systemContent, baseVersionKeys, originalVersionKeys, aclChangesCount()));
-            this.baseVersionKeys.set(null);
-            this.originalVersionKeys.set(null);
-            this.aclChangesCount.set(0);
+            clearState();
         } catch (WrappedException e) {
             Throwable cause = e.getCause();
             throw (cause instanceof RepositoryException) ? (RepositoryException)cause : new RepositoryException(e.getCause());
@@ -1203,7 +1203,16 @@ public class JcrSession implements org.modeshape.jcr.api.Session {
             // The repository has been shutdown ...
         }
     }
-
+    
+    private void clearState() {
+        this.cache.clear();
+        this.baseVersionKeys.set(null);
+        this.originalVersionKeys.set(null);
+        this.aclChangesCount.set(0);
+        this.jcrNodes.clear();
+        this.shareableNodeCache().clear();
+    }
+    
     /**
      * Save a subset of the changes made within this session.
      *
@@ -1279,8 +1288,7 @@ public class JcrSession implements org.modeshape.jcr.api.Session {
     public void refresh( boolean keepChanges ) throws RepositoryException {
         checkLive();
         if (!keepChanges) {
-            cache.clear();
-            aclChangesCount.set(0);
+           clearState();
         }
         // Otherwise there is nothing to do, as all persistent changes are always immediately visible to all sessions
         // using that same workspace
@@ -2496,7 +2504,11 @@ public class JcrSession implements org.modeshape.jcr.api.Session {
          * created) can persist changes (via their SessionCache.save())
          */
         private void signalSaveOfSystemChanges() {
-            cache().checkForTransaction();
+            try {
+                cache().checkForTransaction();
+            } catch (SystemException e) {
+                throw new SystemFailureException(e);
+            }
         }
 
         @Override

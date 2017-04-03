@@ -151,23 +151,27 @@ public class Transactions {
 
         // Get the transaction currently associated with this thread (if there is one) ...
         javax.transaction.Transaction txn = txnMgr.getTransaction();
-        if (txn != null && txn.getStatus() != Status.STATUS_ACTIVE) {
-            logger.warn(JcrI18n.warnRogueTransaction,txn);
-            txnMgr.suspend(); 
-            txn = null;
+        if (txn != null && Status.STATUS_ACTIVE != txn.getStatus()) {
+            // there is a user transaction which is not valid, so abort everything
+            throw new IllegalStateException(JcrI18n.errorInvalidUserTransaction.text(txn));
         }
         
         if (txn == null) {
             // There is no transaction or a leftover one which isn't active, so start a local one ...
             txnMgr.begin();
             // create our wrapper ...
-            localTx = new NestableThreadLocalTransaction(txnMgr).begin();
+            localTx = new NestableThreadLocalTransaction(txnMgr);
+            localTx.begin();
+            // notify the listener
+            localTx.started();
             return logTransactionInformation(localTx);
         }
 
         // There's an existing tx, meaning user transactions are being used
         SynchronizedTransaction synchronizedTransaction = transactionTable.get(txn);
         if (synchronizedTransaction != null) {
+            // notify the listener
+            synchronizedTransaction.started();
             // we've already started our own transaction so just return it as is
             return logTransactionInformation(synchronizedTransaction);
         } else {
@@ -175,6 +179,8 @@ public class Transactions {
             transactionTable.put(txn, synchronizedTransaction);
             // and register a synchronization
             txn.registerSynchronization(synchronizedTransaction);
+            // and notify the listener
+            synchronizedTransaction.started();
             return logTransactionInformation(synchronizedTransaction);
         }
     }
@@ -228,6 +234,10 @@ public class Transactions {
             if (txn == null) {
                 // no active transaction
                 return null;
+            }
+            if (Status.STATUS_ACTIVE != txn.getStatus()) {
+                // there is a user transaction which is not valid, so abort everything
+                throw new IllegalStateException(JcrI18n.errorInvalidUserTransaction.text(txn));
             }
             return transactionTable.get(txn);
         } catch (SystemException e) {
@@ -415,8 +425,9 @@ public class Transactions {
             this.id = UUID.randomUUID().toString();
         }
 
-        protected void started() {
+        protected BaseTransaction started() {
             Transactions.this.listener.txStarted(id);
+            return this;
         }
 
         @Override
@@ -468,7 +479,6 @@ public class Transactions {
 
         protected SimpleTransaction( TransactionManager txnMgr ) {
             super(txnMgr);
-            started();
         }
 
         @Override
@@ -492,7 +502,7 @@ public class Transactions {
 
         @Override
         public void commit()
-                throws RollbackException, HeuristicMixedException, HeuristicRollbackException, SecurityException,
+                throws RollbackException, SecurityException,
                        IllegalStateException, SystemException {
             try {
                 // commit first
@@ -501,6 +511,12 @@ public class Transactions {
                 listener.txCommitted(id);
                 // run the ModeShape commit functions after we've notified the listener
                 executeFunctionsUponCommit();
+            } catch (RollbackException | HeuristicMixedException | HeuristicRollbackException e) {
+                listener.txRolledback(id);
+                throw new RollbackException(e.getMessage());
+            } catch (SystemException e) {
+                listener.txRolledback(id);
+                throw e;
             } finally {
                 // even if commit fails, we want to execute the complete functions to try and leave the repository into a consistent state
                 executeFunctionsUponCompletion();    
@@ -542,7 +558,7 @@ public class Transactions {
 
         @Override
         public void commit()
-                throws RollbackException, HeuristicMixedException, HeuristicRollbackException, SecurityException,
+                throws RollbackException, SecurityException,
                        IllegalStateException, SystemException {
             if (logger.isTraceEnabled()) {
                 super.commit();
@@ -571,7 +587,7 @@ public class Transactions {
         }
 
         @Override
-        public void commit() throws RollbackException, HeuristicMixedException, HeuristicRollbackException, SecurityException, 
+        public void commit() throws RollbackException,  SecurityException, 
                                     IllegalStateException, SystemException {
             if (nestedLevel.getAndDecrement() == 1) {
                 try {
@@ -601,7 +617,6 @@ public class Transactions {
         protected SynchronizedTransaction( TransactionManager txnMgr, javax.transaction.Transaction transaction ) {
             super(txnMgr);
             this.transaction = transaction;
-            started();
         }
 
         @Override
@@ -644,6 +659,14 @@ public class Transactions {
                     transactionTable.remove(this.transaction);
                 }
             }
+        }
+    
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder(getClass().getSimpleName()).append("[local ").append("txId='")
+                                                                                  .append(id).append("', original tx='")
+                                                                                  .append(transaction).append("']");
+            return sb.toString();
         }
     }
 

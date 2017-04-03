@@ -41,6 +41,7 @@ import org.modeshape.jcr.api.value.DateTime;
 import org.modeshape.jcr.cache.CachedNode;
 import org.modeshape.jcr.cache.ChildReference;
 import org.modeshape.jcr.cache.ChildReferences;
+import org.modeshape.jcr.cache.DocumentAlreadyExistsException;
 import org.modeshape.jcr.cache.LockFailureException;
 import org.modeshape.jcr.cache.MutableCachedNode;
 import org.modeshape.jcr.cache.NodeCache;
@@ -57,7 +58,6 @@ import org.modeshape.jcr.value.Path;
 import org.modeshape.jcr.value.PathFactory;
 import org.modeshape.jcr.value.Property;
 import org.modeshape.jcr.value.PropertyFactory;
-import org.modeshape.jcr.value.basic.ModeShapeDateTime;
 
 @ThreadSafe
 class RepositoryLockManager implements ChangeSetListener {
@@ -381,8 +381,10 @@ class RepositoryLockManager implements ChangeSetListener {
             // Now save both sessions. This will fail with a LockFailureException if the locking failed ...
             // save the system session first so that the system change is reflected first in the ws caches
             systemSession.save(lockingSession, null);
-        } catch (LockFailureException e) {
+        } catch (LockFailureException | DocumentAlreadyExistsException e) {
             // Someone must have snuck in and locked the node, and we just didn't receive notification of it yet ...
+            // note that the latter exception is a rare case which can occur only in a cluster under precise timing, when 2 
+            // or more writers attempt to create the same lock the first time
             String location = nodeKey.toString();
             try {
                 location = session.node(nodeKey, null).getPath();
@@ -476,7 +478,8 @@ class RepositoryLockManager implements ChangeSetListener {
         }
 
         // Now save the two sessions ...
-        lockingSession.save(systemSession, null);
+        // save the system session first so that the system change is reflected first in the ws caches
+        systemSession.save(lockingSession, null);
     }
 
     /**
@@ -650,8 +653,29 @@ class RepositoryLockManager implements ChangeSetListener {
         }
         
         protected boolean isExpired() {
-            DateTime now = new ModeShapeDateTime(); 
-            return expiryTime.isBefore(now);
+            return expiryTime.getMilliseconds() < System.currentTimeMillis();
+        }
+        
+        protected long secondsRemaining() {
+            if (!isLive()) {
+                return Long.MIN_VALUE;
+            }
+            if (isSessionScoped()) {
+                // session scoped locks are tied to the lifetime of the session, so always report them as "never expired" or "unknown"
+                return Long.MAX_VALUE;
+            }
+            long millisRemaining = expiryTime.getMilliseconds() - System.currentTimeMillis();
+            long secondsRemaining = TimeUnit.SECONDS.convert(millisRemaining, TimeUnit.MILLISECONDS);
+            if (secondsRemaining > 0) {
+                return secondsRemaining;
+            } else if (millisRemaining > 0) {
+                // JCR expects seconds but internally we're using millis and this method has to correlate (as per TCK)
+                // with #isLive. As such, when there's less than a second to go, but still not expired, we'll return MAX_VALUE
+                // which is the equivalent of UNKNOWN as per the docs
+                return Long.MAX_VALUE;
+            }
+            // the lock has expired
+            return Long.MIN_VALUE;
         }
 
         public NodeKey getLockKey() {
@@ -747,7 +771,7 @@ class RepositoryLockManager implements ChangeSetListener {
 
                 @Override
                 public long getSecondsRemaining() {
-                    return isLockOwningSession() ? Long.MAX_VALUE : Long.MIN_VALUE;
+                   return ModeShapeLock.this.secondsRemaining();
                 }
 
                 @Override

@@ -439,6 +439,7 @@ public class RepositoryConfiguration {
         public static final String HOST = "host";
         public static final String PORT = "port";
         public static final String BUCKET_NAME = "bucketName";
+        public static final String ENDPOINT_URL = "endPoint";
 
         public static final String GARBAGE_COLLECTION = "garbageCollection";
         public static final String INITIAL_TIME = "initialTime";
@@ -447,6 +448,8 @@ public class RepositoryConfiguration {
         public static final String DOCUMENT_OPTIMIZATION = "documentOptimization";
         public static final String OPTIMIZATION_CHILD_COUNT_TARGET = "childCountTarget";
         public static final String OPTIMIZATION_CHILD_COUNT_TOLERANCE = "childCountTolerance";
+        
+        public static final String HOST_ADDRESSES = "hostAddresses";
 
         /**
          * The name for the field (under "sequencing" and "textExtraction") specifying the thread pool that should be used for sequencing.
@@ -1139,6 +1142,7 @@ public class RepositoryConfiguration {
             return binaryStorage.getLong(FieldName.MINIMUM_STRING_SIZE, getMinimumBinarySizeInBytes());
         }
 
+        @SuppressWarnings("unchecked")
         public BinaryStore getBinaryStore() throws Exception {
             String type = getType();
             BinaryStore store = null;
@@ -1202,13 +1206,23 @@ public class RepositoryConfiguration {
                 String database = binaryStorage.getString(FieldName.DATABASE);
                 String username = binaryStorage.getString(FieldName.USER_NAME);
                 String password = binaryStorage.getString(FieldName.USER_PASSWORD);
-                store = new MongodbBinaryStore(host, port, database, username, password, null);                
+                List<String> hostAddresses = (List<String>) binaryStorage.getArray(FieldName.HOST_ADDRESSES);
+                store = new MongodbBinaryStore(host, port, database, username, password, hostAddresses);                
             } else if (type.equalsIgnoreCase(FieldValue.BINARY_STORAGE_TYPE_S3)) {
                 String username = binaryStorage.getString(FieldName.USER_NAME);
                 String password = binaryStorage.getString(FieldName.USER_PASSWORD);
                 String bucketName = binaryStorage.getString(FieldName.BUCKET_NAME);
-                store = new S3BinaryStore(username, password, bucketName);
+                String endPoint = binaryStorage.getString(FieldName.ENDPOINT_URL);
+
+                //Use S3 provided endpoints
+                if (endPoint != null) {
+                    store = new S3BinaryStore(username, password, bucketName, endPoint);
+                }
+                else { //Use default AWS endpoint
+                    store = new S3BinaryStore(username, password, bucketName);
+                }
             }
+
             if (store == null) store = TransientBinaryStore.get();
             store.setMinimumBinarySizeInBytes(getMinimumBinarySizeInBytes());
             return store;
@@ -2307,7 +2321,7 @@ public class RepositoryConfiguration {
         }
         
         protected String getLocking() {
-            return clusteringDoc.getString(FieldName.CLUSTER_LOCKING, FieldValue.LOCKING_JGROUPS);
+            return clusteringDoc.getString(FieldName.CLUSTER_LOCKING, FieldValue.LOCKING_DB);
         }
         
         public boolean useDbLocking() {

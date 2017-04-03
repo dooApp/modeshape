@@ -20,13 +20,17 @@ import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.core.IsNull.nullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,18 +44,21 @@ import javax.jcr.NodeIterator;
 import javax.jcr.PathNotFoundException;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.lock.Lock;
 import javax.jcr.lock.LockManager;
 import javax.jcr.query.Query;
 import javax.jcr.query.QueryManager;
 import javax.jcr.query.QueryResult;
 import javax.jcr.security.AccessControlManager;
 import javax.jcr.security.Privilege;
+import javax.jcr.version.VersionException;
 import javax.jcr.version.VersionManager;
 import javax.transaction.HeuristicMixedException;
 import javax.transaction.HeuristicRollbackException;
 import javax.transaction.InvalidTransactionException;
 import javax.transaction.NotSupportedException;
 import javax.transaction.RollbackException;
+import javax.transaction.Status;
 import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
@@ -182,6 +189,7 @@ public class TransactionsTest extends SingleUseAbstractTest {
     }
 
     @Test
+    @FixFor( "MODE-2642" )
     public void shouldBeAbleToVersionWithinUserTransactionAndDefaultTransactionManager() throws Exception {
         startTransaction();
         VersionManager vm = session.getWorkspace().getVersionManager();
@@ -192,6 +200,13 @@ public class TransactionsTest extends SingleUseAbstractTest {
         node.setProperty("code", "lalalal");
         session.save();
         vm.checkin(node.getPath());
+        assertFalse(node.isCheckedOut());
+        try {
+            node.addMixin("mix:lockable");
+            fail("Expected a version exception because the node is checked in");
+        } catch (VersionException e) {
+            //expected                                                                                        
+        }
         commitTransaction();
     }
 
@@ -476,7 +491,7 @@ public class TransactionsTest extends SingleUseAbstractTest {
 
     @Test
     @FixFor( "MODE-2495" )
-    @Ignore( "ModeShape 5 requires thread confinement, otherwise locking will not work correctly" )
+    @Ignore( "ModeShape 5 requires thread confinement" )
     public void shouldSupportMultipleThreadsChangingTheSameUserTransaction() throws Exception {
         startRepositoryWithConfigurationFrom("config/repo-config-inmemory-txn.json");
 
@@ -514,19 +529,16 @@ public class TransactionsTest extends SingleUseAbstractTest {
         s.logout();
 
         // STEP 5: resume, checkin, commit
-        Thread t5 = new Thread() {
-            @Override
-            public void run() {
-                try {
-                    resumeTransaction(longTx);
-                    VersionManager vm = session.getWorkspace().getVersionManager();
-                    vm.checkin("/parent");
-                    commitTransaction();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+        Thread t5 = new Thread(() -> {
+            try {
+                resumeTransaction(longTx);
+                VersionManager vm1 = session.getWorkspace().getVersionManager();
+                vm1.checkin("/parent");
+                commitTransaction();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-        };
+        });
         t5.start();
         t5.join();
 
@@ -669,7 +681,170 @@ public class TransactionsTest extends SingleUseAbstractTest {
         session.logout();
         commitTransaction();
     }
-  
+    
+    @Test
+    @FixFor( "MODE-2642" )
+    public void shouldLockNodeWithinTransaction() throws Exception {
+        Node node = session.getRootNode().addNode("test");
+        node.addMixin("mix:lockable");
+        session.save();
+        
+        startTransaction();
+        JcrLockManager lockManager = session.getWorkspace().getLockManager();
+        Lock lock = lockManager.lock(node.getPath(), false, false, Long.MAX_VALUE, null);
+        assertTrue(lock.isLive());
+        assertTrue("Node should be locked", node.isLocked());
+        commitTransaction();
+        assertTrue(node.isLocked());
+    }
+    
+    @Test
+    @FixFor( "MODE-2668" )
+    public void shouldRaiseExceptionAndRollbackIfTransactionFails1() throws Exception {
+        session.getRootNode().addNode("parent");
+        session.save();         
+        Transaction tx = startTransaction();
+        tx.rollback();
+        AbstractJcrNode parent = session.getNode("/parent");
+        parent.addNode("child");
+        try {
+            session.save();
+            fail("Expected save operation to fail");
+        } catch (RepositoryException e) {
+            assertTrue(e.getCause() instanceof IllegalStateException);
+            session.refresh(false);
+        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Transaction tx1 = startTransaction();
+                    session.getNode("/parent").addNode("child");
+                    session.save();
+                    tx1.commit();
+                    assertEquals(1, parent.getNodes().getSize());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                } 
+            }, executorService).get();
+        } finally {
+            transactionManager().suspend();
+            executorService.shutdownNow();      
+        }
+    }
+    
+    @Test
+    @FixFor( "MODE-2668" )
+    public void shouldRaiseExceptionAndRollbackIfTransactionFails2() throws Exception {
+        Node parent = session.getRootNode().addNode("parent");
+        session.save();
+        Transaction tx = startTransaction();
+        // add one child
+        parent.addNode("child1");
+        session.save();
+        // explicitly rollback
+        tx.rollback();
+        try {
+            parent.addNode("child2");            
+            session.save();
+            fail("Expected save operation to fail");
+        } catch (RepositoryException e) {
+            assertTrue(e.getCause() instanceof IllegalStateException);
+            session.refresh(false);
+        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Transaction tx1 = startTransaction();
+                    parent.addNode("child1");
+                    parent.addNode("child2");
+                    session.save();
+                    tx1.commit();
+                    assertEquals(2, parent.getNodes().getSize());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }, executorService).get();
+        } finally {
+            transactionManager().suspend();
+            executorService.shutdownNow();        
+        }
+    }
+    
+    @Test
+    @FixFor("MODE-2670")
+    public void shouldRollbackAndCommitTransactionsFromDifferentThreadsForFileProvider() throws Exception {
+        // Start the repository using the JBoss Transactions transaction manager ...
+        startRepositoryWithConfigurationFrom("config/repo-config-inmemory-txn.json");
+        testCommitAndRollbackOffSeparateThreads();
+    }  
+    
+    @Test
+    @FixFor("MODE-2670")
+    public void shouldRollbackAndCommitTransactionsFromDifferentThreadsForDBProvider() throws Exception {
+        FileUtil.delete("target/txn");
+        // Start the repository using the JBoss Transactions transaction manager ...
+        startRepositoryWithConfigurationFrom("config/repo-config-db-txn.json");
+        testCommitAndRollbackOffSeparateThreads();
+    }
+    
+    private void testCommitAndRollbackOffSeparateThreads() throws Exception {
+        session.getRootNode().addNode("parent");
+        session.save();
+        
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        try {
+            transactionManager().begin();
+            Transaction tx = transactionManager().getTransaction();
+            assertNotNull(tx);
+            session.getNode("/parent").addNode("child");
+            session.save();
+            executorService.submit(() -> {
+                tx.rollback();
+                return null;
+            }).get(2, TimeUnit.SECONDS);
+         
+            //nothing should be there
+            assertNoNode("/parent/child");
+            // and the tx off thread 'main' should be aborted
+            Transaction afterRollback = transactionManager().getTransaction();
+            assertNotNull(afterRollback);
+            assertEquals(Status.STATUS_ROLLEDBACK, afterRollback.getStatus());
+            // remove it from the current thread
+            transactionManager().suspend();
+        
+            //now make the same change and commit from a separate thread
+            executorService.submit(() -> {
+                transactionManager().begin();
+                final Transaction tx1 = transactionManager().getTransaction();
+                assertNotNull(tx1);
+                assertEquals(Status.STATUS_ACTIVE, tx1.getStatus());
+                session.getNode("/parent").addNode("child");
+                session.save();
+                executorService.submit(() -> {
+                    tx1.commit();
+                    return null;
+                }).get(2, TimeUnit.SECONDS);
+                // we've committed off a different thread, but the changes should be persisted
+                try {
+                    assertNode("/parent/child");
+                    return null;
+                } finally {
+                    //remove it from the current thread
+                    transactionManager().suspend();                    
+                }
+            }).get(2, TimeUnit.SECONDS);
+            assertNode("/parent/child");
+            assertNull(transactionManager().getTransaction());
+        } catch (java.util.concurrent.TimeoutException te) {
+            fail("Timeout detected; this means threads are not able to complete due to a lock starvation");
+        }
+        finally {
+            executorService.shutdownNow();     
+        }
+    }
+    
     private void insertAndQueryNodes(int i) {
         Session session = null;
 

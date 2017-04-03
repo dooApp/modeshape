@@ -35,10 +35,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import javax.transaction.HeuristicMixedException;
-import javax.transaction.HeuristicRollbackException;
-import javax.transaction.NotSupportedException;
-import javax.transaction.RollbackException;
 import javax.transaction.Status;
 import javax.transaction.SystemException;
 import org.modeshape.common.SystemFailureException;
@@ -113,7 +109,6 @@ public class WritableSessionCache extends AbstractSessionCache {
      */
     private static final Logger SAVE_LOGGER = Logger.getLogger("org.modeshape.jcr.txn");
 
-    protected static final Logger LOGGER = Logger.getLogger(WritableSessionCache.class);
     private static final NodeKey REMOVED_KEY = new NodeKey("REMOVED_NODE_SHOULD_NEVER_BE_PERSISTED");
     private static final SessionNode REMOVED = new SessionNode(REMOVED_KEY, false);
     private static final int MAX_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT = 4;
@@ -151,7 +146,7 @@ public class WritableSessionCache extends AbstractSessionCache {
     public WritableSessionCache(ExecutionContext context,
                                 WorkspaceCache workspaceCache,
                                 TransactionalWorkspaceCaches txWorkspaceCaches,
-                                RepositoryEnvironment repositoryEnvironment) {
+                                RepositoryEnvironment repositoryEnvironment)  {
         super(context, workspaceCache);
         this.changedNodes = new HashMap<>();
         this.changedNodesInOrder = new LinkedHashSet<>();
@@ -163,7 +158,11 @@ public class WritableSessionCache extends AbstractSessionCache {
         assert txWorkspaceCaches != null;
         this.txWorkspaceCaches = txWorkspaceCaches;
       
-        checkForTransaction();        
+        try {
+            checkForTransaction();        
+        } catch (SystemException e) {
+            throw new SystemFailureException(e);
+        }
     }
 
     protected final void assertInSession( SessionNode node ) {
@@ -177,12 +176,7 @@ public class WritableSessionCache extends AbstractSessionCache {
         }
         return null;
     }
-
-    @Override
-    protected Logger logger() {
-        return LOGGER;
-    }
-
+    
     @Override
     public CachedNode getNode( NodeKey key ) {
         CachedNode sessionNode = null;
@@ -401,7 +395,7 @@ public class WritableSessionCache extends AbstractSessionCache {
      * shared workspace cache.
      */
     @Override
-    public void checkForTransaction() {
+    public void checkForTransaction() throws SystemException {
         try {
             Transactions transactions = repositoryEnvironment.getTransactions();
             javax.transaction.Transaction txn = transactions.getTransactionManager().getTransaction();
@@ -433,8 +427,9 @@ public class WritableSessionCache extends AbstractSessionCache {
                 // reset the ws cache to the shared (global one)
                 setWorkspaceCache(sharedWorkspaceCache());
             }
-        } catch (Exception e) {
-            logger().error(e, JcrI18n.errorDeterminingCurrentTransactionAssumingNone, workspaceName(), e.getMessage());
+        } catch (SystemException e) {
+            logger.error(e, JcrI18n.errorDeterminingCurrentTransactionAssumingNone, workspaceName(), e.getMessage());
+            throw e;
         }
     }
 
@@ -524,11 +519,11 @@ public class WritableSessionCache extends AbstractSessionCache {
 
             int repeat = txns.isCurrentlyInTransaction() ? 1 : MAX_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT;
             while (--repeat >= 0) {
+                // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
+                txn = txns.begin();
+                assert txn != null;
+
                 try {
-                    // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
-                    txn = txns.begin();
-                    assert txn != null;
-                    
                     // We've either started our own transaction or one was already started. In either case *we must* make 
                     // sure we're not using the shared workspace cache as the active workspace cache. 
                     checkForTransaction();
@@ -548,12 +543,7 @@ public class WritableSessionCache extends AbstractSessionCache {
                         txn.uponCommit(binaryUsageUpdateFunction(events.usedBinaries(), events.unusedBinaries()));
                     }
 
-                    LOGGER.debug("Altered {0} node(s)", numNodes);
-
-                    // Commit the transaction ...
-                    txn.commit();
-
-                    clearState();
+                    logger.debug("Altered {0} node(s)", numNodes);
 
                 } catch (TimeoutException e) {
                     txn.rollback();
@@ -562,40 +552,19 @@ public class WritableSessionCache extends AbstractSessionCache {
                     }
                     Thread.sleep(PAUSE_TIME_BEFORE_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT);
                     continue;
-                } catch (NotSupportedException err) {
-                    // No nested transactions are supported ...
-                    throw new SystemFailureException(err);
-                } catch (SecurityException err) {
-                    // No privilege to commit ...
-                    throw new SystemFailureException(err);
-                } catch (IllegalStateException err) {
-                    // Not associated with a txn??
-                    throw new SystemFailureException(err);
-                } catch (RollbackException err) {
-                    // Couldn't be committed, but the txn is already rolled back ...
-                    return;
-                } catch (HeuristicMixedException err) {
-                    // Rollback has occurred ...
-                    return;
-                } catch (HeuristicRollbackException err) {
-                    // Rollback has occurred ...
-                    return;
-                } catch (SystemException err) {
-                    // System failed unexpectedly ...
-                    throw new SystemFailureException(err);
-                } catch (Throwable t) {
-                    // any other exception/error we should rollback
-                    if (txn != null) {
-                        txn.rollback();
-                    }
-                    // let the exception bubble up
-                    throw t;
+                } catch (Exception err) {
+                    logger.debug(err, "Error while attempting to save");
+                    // Some error occurred (likely within our code) ...
+                    rollback(txn, err);
                 }
 
+                // Commit the transaction ...
+                txn.commit();
+                clearState();
+                
                 // If we've made it this far, we should never repeat ...
                 break;
             }
-
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable t) {
@@ -648,7 +617,7 @@ public class WritableSessionCache extends AbstractSessionCache {
         }
     }
 
-    protected void clearState() {
+    protected void clearState() throws SystemException {
         // The changes have been made, so create a new map (we're using the keys from the current map) ...
         this.changedNodes = new HashMap<>();
         this.referrerChangesForRemovedNodes.clear();
@@ -658,7 +627,7 @@ public class WritableSessionCache extends AbstractSessionCache {
         this.checkForTransaction();
     }
 
-    protected void clearState( Iterable<NodeKey> savedNodesInOrder ) {
+    protected void clearState( Iterable<NodeKey> savedNodesInOrder ) throws SystemException {
         // The changes have been made, so remove the changes from this session's map ...
         for (NodeKey savedNode : savedNodesInOrder) {
             this.changedNodes.remove(savedNode);
@@ -695,95 +664,67 @@ public class WritableSessionCache extends AbstractSessionCache {
 
             int repeat = txns.isCurrentlyInTransaction() ? 1 : MAX_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT;
             while (--repeat >= 0) {
+                // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
+                txn = txns.begin();
+                assert txn != null;
+
+                // Get a monitor via the transaction ...
                 try {
-                    // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
-                    txn = txns.begin();
-                    assert txn != null;
+                    // We've either started our own transaction or one was already started. In either case *we must* make 
+                    // sure we're not using the shared workspace cache as the active workspace cache. This is because the
+                    // the shared workspace cache is "shared" with all others (incl readers) and we might end up placing entries in the 
+                    // shared workspace cache which are being edited by us
+                    this.checkForTransaction();
+                    that.checkForTransaction();
 
-                    // Get a monitor via the transaction ...
-                    try {
-                        // We've either started our own transaction or one was already started. In either case *we must* make 
-                        // sure we're not using the shared workspace cache as the active workspace cache. This is because the
-                        // the shared workspace cache is "shared" with all others (incl readers) and we might end up placing entries in the 
-                        // shared workspace cache which are being edited by us
-                        this.checkForTransaction();
-                        that.checkForTransaction();
+                    // Lock the nodes in  and bring the latest version of these nodes in the transactional workspace cache
+                    lockNodes(this.changedNodesInOrder);
+                    that.lockNodes(that.changedNodesInOrder);
 
-                        // Lock the nodes in  and bring the latest version of these nodes in the transactional workspace cache
-                        lockNodes(this.changedNodesInOrder);
-                        that.lockNodes(that.changedNodesInOrder);
-                        
-                        // process after locking
-                        runAfterLocking(preSaveOperation);
+                    // process after locking
+                    runAfterLocking(preSaveOperation);
 
-                        // Now persist the changes ...
-                        logChangesBeingSaved(this.changedNodesInOrder, that.changedNodesInOrder
-                                            );
-                        events1 = persistChanges(this.changedNodesInOrder);
-                        // If there are any binary changes, add a function which will update the binary store
-                        if (events1.hasBinaryChanges()) {
-                            txn.uponCommit(binaryUsageUpdateFunction(events1.usedBinaries(), events1.unusedBinaries()));
-                        }
-                        events2 = that.persistChanges(that.changedNodesInOrder);
-                        if (events2.hasBinaryChanges()) {
-                            txn.uponCommit(binaryUsageUpdateFunction(events2.usedBinaries(), events2.unusedBinaries()));
-                        }
-                    } catch (TimeoutException e) {
-                        txn.rollback();
-                        if (repeat <= 0) throw new TimeoutException(e.getMessage(), e);
-                        --repeat;
-                        Thread.sleep(PAUSE_TIME_BEFORE_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT);
-                        continue;
-                    } catch (IllegalStateException err) {
-                        // Not associated with a txn??
-                        throw new SystemFailureException(err);
-                    } catch (IllegalArgumentException err) {
-                        // Not associated with a txn??
-                        throw new SystemFailureException(err);
-                    } catch (Exception e) {
-                        LOGGER.debug(e, "Error while attempting to save");
-                        // Some error occurred (likely within our code) ...
-                        txn.rollback();
-                        throw e;
+                    // Now persist the changes ...
+                    logChangesBeingSaved(this.changedNodesInOrder, that.changedNodesInOrder
+                    );
+                    events1 = persistChanges(this.changedNodesInOrder);
+                    // If there are any binary changes, add a function which will update the binary store
+                    if (events1.hasBinaryChanges()) {
+                        txn.uponCommit(binaryUsageUpdateFunction(events1.usedBinaries(), events1.unusedBinaries()));
                     }
-
-                    LOGGER.debug("Altered {0} node(s)", numNodes);
-
-                    // Commit the transaction ...
-                    txn.commit();
-
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Altered {0} keys: {1}", numNodes, this.changedNodes.keySet());
+                    events2 = that.persistChanges(that.changedNodesInOrder);
+                    if (events2.hasBinaryChanges()) {
+                        txn.uponCommit(binaryUsageUpdateFunction(events2.usedBinaries(), events2.unusedBinaries()));
                     }
-
-                    this.clearState();
-                    that.clearState();
-
-                } catch (NotSupportedException err) {
-                    // No nested transactions are supported ...
-                    return;
-                } catch (SecurityException err) {
-                    // No privilege to commit ...
-                    throw new SystemFailureException(err);
-                } catch (IllegalStateException err) {
-                    // Not associated with a txn??
-                    throw new SystemFailureException(err);
-                } catch (RollbackException err) {
-                    // Couldn't be committed, but the txn is already rolled back ...
-                    return;
-                } catch (HeuristicMixedException err) {
-                } catch (HeuristicRollbackException err) {
-                    // Rollback has occurred ...
-                    return;
-                } catch (SystemException err) {
-                    // System failed unexpectedly ...
-                    throw new SystemFailureException(err);
+                } catch (TimeoutException e) {
+                    txn.rollback();
+                    if (repeat <= 0) {
+                        throw new TimeoutException(e.getMessage(), e);
+                    }
+                    --repeat;
+                    Thread.sleep(PAUSE_TIME_BEFORE_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT);
+                    continue;
+                } catch (Exception e) {
+                    logger.debug(e, "Error while attempting to save");
+                    // Some error occurred (likely within our code) ...
+                    rollback(txn, e);
                 }
+
+                logger.debug("Altered {0} node(s)", numNodes);
+
+                // Commit the transaction ...
+                txn.commit();
+
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Altered {0} keys: {1}", numNodes, this.changedNodes.keySet());
+                }
+
+                this.clearState();
+                that.clearState();
 
                 // If we've made it this far, we should never repeat ...
                 break;
             }
-
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
@@ -844,87 +785,61 @@ public class WritableSessionCache extends AbstractSessionCache {
             // Before we start the transaction, apply the pre-save operations to the new and changed nodes below the path ...
             final List<NodeKey> savedNodesInOrder = runBeforeLocking(preSaveOperation, toBeSaved);
             final int numNodes = savedNodesInOrder.size() + that.changedNodesInOrder.size();
-
+    
             int repeat = txns.isCurrentlyInTransaction() ? 1 : MAX_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT;
             while (--repeat >= 0) {
+                // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
+                txn = txns.begin();
+                assert txn != null;
+
                 try {
-                    // Start a ModeShape transaction (which may be a part of a larger JTA transaction) ...
-                    txn = txns.begin();
-                    assert txn != null;
+                    // We've either started our own transaction or one was already started. In either case *we must* make 
+                    // sure we're not using the shared workspace cache as the active workspace cache. This is because the
+                    // the shared workspace cache is "shared" with all others (incl readers) and we might end up placing entries in the 
+                    // shared workspace cache which are being edited by us
+                    this.checkForTransaction();
+                    that.checkForTransaction();
 
-                    try {
-                        // We've either started our own transaction or one was already started. In either case *we must* make 
-                        // sure we're not using the shared workspace cache as the active workspace cache. This is because the
-                        // the shared workspace cache is "shared" with all others (incl readers) and we might end up placing entries in the 
-                        // shared workspace cache which are being edited by us
-                        this.checkForTransaction();
-                        that.checkForTransaction();
-                        
-                        // Lock the nodes and bring the latest version of these nodes in the transactional workspace cache
-                        lockNodes(savedNodesInOrder);
-                        that.lockNodes(that.changedNodesInOrder);
-                        
-                        // process after locking
-                        // Before we start the transaction, apply the pre-save operations to the new and changed nodes ...
-                        runAfterLocking(preSaveOperation, toBeSaved);
+                    // Lock the nodes and bring the latest version of these nodes in the transactional workspace cache
+                    lockNodes(savedNodesInOrder);
+                    that.lockNodes(that.changedNodesInOrder);
 
-                        // Now persist the changes ...
-                        logChangesBeingSaved(savedNodesInOrder, that.changedNodesInOrder);
-                        events1 = persistChanges(savedNodesInOrder);
-                        // If there are any binary changes, add a function which will update the binary store
-                        if (events1.hasBinaryChanges()) {
-                            txn.uponCommit(binaryUsageUpdateFunction(events1.usedBinaries(), events1.unusedBinaries()));
-                        }
-                        events2 = that.persistChanges(that.changedNodesInOrder);
-                        if (events2.hasBinaryChanges()) {
-                            txn.uponCommit(binaryUsageUpdateFunction(events2.usedBinaries(), events2.unusedBinaries()));
-                        }
-                    } catch (TimeoutException e) {
-                        txn.rollback();
-                        if (repeat <= 0) throw new TimeoutException(e.getMessage(), e);
-                        --repeat;
-                        Thread.sleep(PAUSE_TIME_BEFORE_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT);
-                        continue;
-                    } catch (IllegalStateException err) {
-                        // Not associated with a txn??
-                        throw new SystemFailureException(err);
-                    } catch (IllegalArgumentException err) {
-                        // Not associated with a txn??
-                        throw new SystemFailureException(err);
-                    } catch (Exception e) {
-                        // Some error occurred (likely within our code) ...
-                        txn.rollback();
-                        throw e;
+                    // process after locking
+                    // Before we start the transaction, apply the pre-save operations to the new and changed nodes ...
+                    runAfterLocking(preSaveOperation, toBeSaved);
+
+                    // Now persist the changes ...
+                    logChangesBeingSaved(savedNodesInOrder, that.changedNodesInOrder);
+                    events1 = persistChanges(savedNodesInOrder);
+                    // If there are any binary changes, add a function which will update the binary store
+                    if (events1.hasBinaryChanges()) {
+                        txn.uponCommit(binaryUsageUpdateFunction(events1.usedBinaries(), events1.unusedBinaries()));
                     }
-
-                    LOGGER.debug("Altered {0} node(s)", numNodes);
-
-                    // Commit the transaction ...
-                    txn.commit();
-
-                    clearState(savedNodesInOrder);
-                    that.clearState();
-
-                } catch (NotSupportedException err) {
-                    // No nested transactions are supported ...
-                    return;
-                } catch (SecurityException err) {
-                    // No privilege to commit ...
-                    throw new SystemFailureException(err);
-                } catch (IllegalStateException err) {
-                    // Not associated with a txn??
-                    throw new SystemFailureException(err);
-                } catch (RollbackException err) {
-                    // Couldn't be committed, but the txn is already rolled back ...
-                    return;
-                } catch (HeuristicMixedException err) {
-                } catch (HeuristicRollbackException err) {
-                    // Rollback has occurred ...
-                    return;
-                } catch (SystemException err) {
-                    // System failed unexpectedly ...
-                    throw new SystemFailureException(err);
+                    events2 = that.persistChanges(that.changedNodesInOrder);
+                    if (events2.hasBinaryChanges()) {
+                        txn.uponCommit(binaryUsageUpdateFunction(events2.usedBinaries(), events2.unusedBinaries()));
+                    }
+                } catch (TimeoutException e) {
+                    txn.rollback();
+                    if (repeat <= 0) {
+                        throw new TimeoutException(e.getMessage(), e);
+                    }
+                    --repeat;
+                    Thread.sleep(PAUSE_TIME_BEFORE_REPEAT_FOR_LOCK_ACQUISITION_TIMEOUT);
+                    continue;
+                } catch (Exception e) {
+                    logger.debug(e, "Error while attempting to save");
+                    // Some error occurred (likely within our code) ...
+                    rollback(txn, e);
                 }
+
+                logger.debug("Altered {0} node(s)", numNodes);
+
+                // Commit the transaction ...
+                txn.commit();
+
+                clearState(savedNodesInOrder);
+                that.clearState();
 
                 // If we've made it this far, we should never repeat ...
                 break;
@@ -947,6 +862,23 @@ public class WritableSessionCache extends AbstractSessionCache {
         txns.updateCache(that.workspaceCache(), events2, txn);
     }
 
+    /**
+     * Rolling back given transaction caused by given cause.
+     * 
+     * @param txn the transaction 
+     * @param cause roll back cause
+     * @throws Exception roll back cause.
+     */
+    private void rollback(Transaction txn, Exception cause) throws Exception {
+        try {
+            txn.rollback();
+        } catch (Exception e) {
+            logger.debug(e, "Error while rolling back transaction " + txn);
+        } finally {
+            throw cause;
+        }
+    }
+    
     /**
      * Persist the changes within an already-established transaction.
      *
@@ -1155,7 +1087,7 @@ public class WritableSessionCache extends AbstractSessionCache {
                     switch (lockChange) {
                         case LOCK_FOR_SESSION:
                         case LOCK_FOR_NON_SESSION:
-                            // check is another session has already locked the document
+                            // check if another session has already locked the document
                             if (translator.isLocked(doc)) {
                                 throw new LockFailureException(key);
                             }
@@ -1562,9 +1494,9 @@ public class WritableSessionCache extends AbstractSessionCache {
         }
         DocumentStore documentStore = workspaceCache.documentStore();
 
-        if (LOGGER.isDebugEnabled()) {
+        if (logger.isDebugEnabled()) {
             if (!this.changedNodes.isEmpty()) {
-                LOGGER.debug("Attempting to the lock nodes: {0}", changedNodes.keySet());
+                logger.debug("Attempting to the lock nodes: {0}", changedNodes.keySet());
             }
         }
         // Try to acquire from the DocumentStore locks for all the nodes that we're going to change ...
@@ -1578,37 +1510,38 @@ public class WritableSessionCache extends AbstractSessionCache {
         String txId = modeshapeTx.id();
         Set<String> lockedKeysForTx = LOCKED_KEYS_BY_TX_ID.computeIfAbsent(txId, id -> new LinkedHashSet<>());
         if (lockedKeysForTx.containsAll(changedNodesKeys)) {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("The keys {0} have been locked previously as part of the transaction {1}; skipping them...",
+            if (logger.isDebugEnabled()) {
+                logger.debug("The keys {0} have been locked previously as part of the transaction {1}; skipping them...",
                              changedNodesKeys, txId);    
             }             
-        } else {
-            // there are new nodes that we need to lock...
-            Set<String> newKeysToLock = new TreeSet<>(changedNodesKeys);
-            newKeysToLock.removeAll(lockedKeysForTx);
-            int retryCountOnLockTimeout = 3;
-            boolean locksAcquired = false;
-            while (!locksAcquired && retryCountOnLockTimeout > 0) {
-                locksAcquired = documentStore.lockDocuments(newKeysToLock);
-                if (locksAcquired) {
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Locked the nodes: {0}", newKeysToLock);
-                    }
-                } else {
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Timeout while attempting to lock keys {0}. Retrying....", newKeysToLock);
-                    }
-                    --retryCountOnLockTimeout;
-                }
-            }
-            if (!locksAcquired) {
-                throw new TimeoutException(
-                        "Timeout while attempting to lock the keys " + changedNodesKeys + " after " + retryCountOnLockTimeout +
-                        " retry attempts.");
-            }
-            lockedKeysForTx.addAll(newKeysToLock);
+            return;
         }
-
+    
+        // there are new nodes that we need to lock...
+        Set<String> newKeysToLock = new TreeSet<>(changedNodesKeys);
+        newKeysToLock.removeAll(lockedKeysForTx);
+        int retryCountOnLockTimeout = 3;
+        boolean locksAcquired = false;
+        while (!locksAcquired && retryCountOnLockTimeout > 0) {
+            locksAcquired = documentStore.lockDocuments(newKeysToLock);
+            if (locksAcquired) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Locked the nodes: {0}", newKeysToLock);
+                }
+            } else {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Timeout while attempting to lock keys {0}. Retrying....", newKeysToLock);
+                }
+                --retryCountOnLockTimeout;
+            }
+        }
+        if (!locksAcquired) {
+            throw new TimeoutException(
+                    "Timeout while attempting to lock the keys " + changedNodesKeys + " after " + retryCountOnLockTimeout +
+                    " retry attempts.");
+        }
+        lockedKeysForTx.addAll(newKeysToLock);
+    
         // now that we've locked the keys, load all of the from the document store
         // note that some of the keys may be new but it's important to pass the entire set down to the document store
         workspaceCache.loadFromDocumentStore(changedNodesKeys);
@@ -1634,30 +1567,30 @@ public class WritableSessionCache extends AbstractSessionCache {
         final BinaryStore binaryStore = getContext().getBinaryStore();
         return () -> {
             if (!usedBinaries.isEmpty()) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Marking binary values as used: {0}", usedBinaries);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Marking binary values as used: {0}", usedBinaries);
                 }
                 try {
                     binaryStore.markAsUsed(usedBinaries);
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Finished marking binary values as used: {0}", usedBinaries);
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Finished marking binary values as used: {0}", usedBinaries);
                     }
                 } catch (BinaryStoreException e) {
-                    LOGGER.error(e, JcrI18n.errorMarkingBinaryValuesUsed, e.getMessage());
+                    logger.error(e, JcrI18n.errorMarkingBinaryValuesUsed, e.getMessage());
                 }
             }
 
             if (!unusedBinaries.isEmpty()) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Marking binary values as unused: {0}", unusedBinaries);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Marking binary values as unused: {0}", unusedBinaries);
                 }
                 try {
                     binaryStore.markAsUnused(unusedBinaries);
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Finished marking binary values as unused: {0}", unusedBinaries);
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Finished marking binary values as unused: {0}", unusedBinaries);
                     }
                 } catch (BinaryStoreException e) {
-                    LOGGER.error(e, JcrI18n.errorMarkingBinaryValuesUnused, e.getMessage());
+                    logger.error(e, JcrI18n.errorMarkingBinaryValuesUnused, e.getMessage());
                 }
             }
         };
@@ -1794,7 +1727,7 @@ public class WritableSessionCache extends AbstractSessionCache {
                 this.changedNodes.putAll(removed);
             } catch (RuntimeException e2) {
                 I18n msg = JcrI18n.failedWhileRollingBackDestroyToRuntimeError;
-                LOGGER.error(e2, msg, e2.getMessage(), e.getMessage());
+                logger.error(e2, msg, e2.getMessage(), e.getMessage());
             } finally {
                 // Re-throw original exception ...
                 throw e;

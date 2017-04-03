@@ -16,6 +16,7 @@
 package org.modeshape.jboss.subsystem;
 
 import static org.modeshape.jboss.subsystem.ModeShapeExtension.JBOSS_DATA_DIR_VARIABLE;
+
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ListAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinition;
@@ -494,7 +495,7 @@ public class ModelAttributes {
                                                              .setAllowExpression(true)
                                                              .setAllowNull(false)
                                                              .setValidator(PROJECTION_VALIDATOR)
-                                                             .setFlags(AttributeAccess.Flag.RESTART_NONE)
+                                                             .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                                                              .build())
                                                  .setAllowNull(true)
                                                  .setMinSize(1)
@@ -505,7 +506,7 @@ public class ModelAttributes {
                     .setXmlName(Attribute.CLASSNAME.getLocalName())
                     .setAllowExpression(false)
                     .setAllowNull(true)
-                    .setFlags(AttributeAccess.Flag.RESTART_NONE)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
 
     public static final SimpleAttributeDefinition CACHEABLE =
@@ -513,7 +514,7 @@ public class ModelAttributes {
                     .setXmlName(Attribute.CACHEABLE.getLocalName())
                     .setAllowExpression(false)
                     .setAllowNull(true)
-                    .setFlags(AttributeAccess.Flag.RESTART_NONE)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
 
     public static final SimpleAttributeDefinition QUERYABLE =
@@ -521,7 +522,7 @@ public class ModelAttributes {
                     .setXmlName(Attribute.QUERYABLE.getLocalName())
                     .setAllowExpression(false)
                     .setAllowNull(true)
-                    .setFlags(AttributeAccess.Flag.RESTART_NONE)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
 
     public static final SimpleAttributeDefinition READONLY =
@@ -529,7 +530,7 @@ public class ModelAttributes {
                     .setXmlName(Attribute.READONLY.getLocalName())
                     .setAllowExpression(false)
                     .setAllowNull(true)
-                    .setFlags(AttributeAccess.Flag.RESTART_NONE)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .setDefaultValue(new ModelNode(false))
                     .build();
 
@@ -538,8 +539,7 @@ public class ModelAttributes {
                     .setXmlName(Attribute.EXPOSE_AS_WORKSPACE.getLocalName())
                     .setAllowExpression(false)
                     .setAllowNull(true)
-                    .setFlags(AttributeAccess.Flag.RESTART_NONE)
-                    .setDefaultValue(new ModelNode(false))
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
 
     public static final ListAttributeDefinition PREDEFINED_WORKSPACE_NAMES =
@@ -593,7 +593,10 @@ public class ModelAttributes {
     public static final SimpleAttributeDefinition PROPERTY = new SimpleAttributeDefinition(ModelKeys.PROPERTY, 
                                                                                            ModelType.PROPERTY, true);
     public static final SimpleListAttributeDefinition PROPERTIES =
-            SimpleListAttributeDefinition.Builder.of(ModelKeys.PROPERTIES, PROPERTY).setAllowNull(true).build();
+            SimpleListAttributeDefinition.Builder.of(ModelKeys.PROPERTIES, PROPERTY)
+                                                 .setAllowNull(true)
+                                                 .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
+                                                 .build();
 
     public static final SimpleAttributeDefinition RELATIVE_TO =
             new SimpleAttributeDefinitionBuilder(ModelKeys.RELATIVE_TO, ModelType.STRING)
@@ -910,7 +913,7 @@ public class ModelAttributes {
             new MappedAttributeDefinitionBuilder(Attribute.HOST.getLocalName(), ModelType.STRING,
                                                  FieldName.STORAGE, FieldName.BINARY_STORAGE, FieldName.HOST)
                     .setAllowExpression(true)
-                    .setAllowNull(false)
+                    .setAllowNull(true)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
     
@@ -918,7 +921,7 @@ public class ModelAttributes {
             new MappedAttributeDefinitionBuilder(Attribute.PORT.getLocalName(), ModelType.INT,
                                                  FieldName.STORAGE, FieldName.BINARY_STORAGE, FieldName.PORT)
                     .setAllowExpression(true)
-                    .setAllowNull(false)
+                    .setAllowNull(true)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .build();
     
@@ -941,6 +944,14 @@ public class ModelAttributes {
     public static final MappedSimpleAttributeDefinition MONGO_PASSWORD =
             new MappedAttributeDefinitionBuilder(Attribute.PASSWORD.getLocalName(), ModelType.STRING,
                                                  FieldName.STORAGE, FieldName.BINARY_STORAGE, FieldName.USER_PASSWORD)
+                    .setAllowExpression(true)
+                    .setAllowNull(true)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
+                    .build();
+    
+    public static final MappedSimpleAttributeDefinition MONGO_HOST_ADDRESSES =
+            new MappedAttributeDefinitionBuilder(Attribute.HOST_ADDRESSES.getLocalName(), ModelType.STRING,
+                                                 FieldName.STORAGE, FieldName.BINARY_STORAGE, FieldName.HOST_ADDRESSES)
                     .setAllowExpression(true)
                     .setAllowNull(true)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
@@ -969,6 +980,14 @@ public class ModelAttributes {
             .setAllowNull(false)
             .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
             .build();
+
+    public static final MappedSimpleAttributeDefinition S3_ENDPOINT_URL =
+        new MappedAttributeDefinitionBuilder(Attribute.ENDPOINT_URL.getLocalName(), ModelType.STRING,
+                                             FieldName.STORAGE, FieldName.BINARY_STORAGE, FieldName.ENDPOINT_URL)
+                .setAllowExpression(true)
+                .setAllowNull(true)
+                .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
+                .build();
 
     public static final AttributeDefinition[] SUBSYSTEM_ATTRIBUTES = {};
 
@@ -999,10 +1018,10 @@ public class ModelAttributes {
         MIME_TYPE_DETECTION, CASSANDRA_HOST };
 
     public static final AttributeDefinition[] S3_BINARY_STORAGE_ATTRIBUTES = {MINIMUM_BINARY_SIZE, MINIMUM_STRING_SIZE,
-        MIME_TYPE_DETECTION, S3_USERNAME, S3_PASSWORD, S3_BUCKET_NAME};
+        MIME_TYPE_DETECTION, S3_USERNAME, S3_PASSWORD, S3_BUCKET_NAME, S3_ENDPOINT_URL};
 
-    public static final AttributeDefinition[] MONGO_BINARY_STORAGE_ATTRIBUTES = {MINIMUM_BINARY_SIZE, MINIMUM_STRING_SIZE,
-        MIME_TYPE_DETECTION, MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD};
+    public static final AttributeDefinition[] MONGO_BINARY_STORAGE_ATTRIBUTES = { MINIMUM_BINARY_SIZE, MINIMUM_STRING_SIZE,
+                                                                                  MIME_TYPE_DETECTION, MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD, MONGO_HOST_ADDRESSES };
 
     public static final AttributeDefinition[] COMPOSITE_BINARY_STORAGE_ATTRIBUTES = {MINIMUM_BINARY_SIZE, MINIMUM_STRING_SIZE,
         NESTED_STORES, MIME_TYPE_DETECTION};
@@ -1018,7 +1037,8 @@ public class ModelAttributes {
     public static final AttributeDefinition[] SEQUENCER_ATTRIBUTES = {PATH_EXPRESSIONS, SEQUENCER_CLASSNAME, MODULE, PROPERTIES};
     public static final AttributeDefinition[] PERSISTENCE_DB_ATTRIBUTES = { TABLE_NAME, CREATE_ON_START, DROP_ON_EXIT,
                                                                             FETCH_SIZE, CONNECTION_URL, DRIVER, USERNAME, PASSWORD,
-                                                                            PERSISTENCE_DS_JNDI_NAME, DB_COMPRESS, POOL_SIZE }; 
+                                                                            PERSISTENCE_DS_JNDI_NAME, DB_COMPRESS, POOL_SIZE, 
+                                                                            PROPERTIES}; 
     public static final AttributeDefinition[] PERSISTENCE_FS_ATTRIBUTES = { FS_PATH, FS_COMPRESS};
     public static final AttributeDefinition[] SOURCE_ATTRIBUTES = { PROJECTIONS, CONNECTOR_CLASSNAME, READONLY, CACHEABLE,
                                                                     QUERYABLE, MODULE, PROPERTIES, EXPOSE_AS_WORKSPACE};

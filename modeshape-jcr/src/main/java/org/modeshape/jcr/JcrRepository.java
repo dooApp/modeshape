@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -46,6 +47,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import javax.jcr.AccessDeniedException;
 import javax.jcr.Credentials;
 import javax.jcr.LoginException;
@@ -63,6 +65,7 @@ import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
 import org.jgroups.Channel;
 import org.modeshape.common.annotation.Immutable;
+import org.modeshape.common.collection.Problem;
 import org.modeshape.common.collection.Problems;
 import org.modeshape.common.collection.SimpleProblems;
 import org.modeshape.common.i18n.I18n;
@@ -274,7 +277,7 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
      * <ul>
      * <li>configuration warnings - any warnings raised by the structure of the repository configuration file</li>
      * <li>startup warnings/error - any warnings/errors raised by various repository components which didn't prevent them from
-     * starting up, but could mean they are only partly intialized.</li>
+     * starting up, but could mean they are only partly initialized.</li>
      * </ul>
      * </p>
      *
@@ -342,11 +345,15 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
             if (oldState != null) {
                 assert state.get() == State.RUNNING;
                 // Repository is running, so create a new running state ...
-                this.runningState.set(new RunningState(oldState, configChanges));
+                RunningState newState = new RunningState(oldState, configChanges);
+                this.runningState.set(newState);
 
                 // Handle a few special cases that the running state doesn't really handle itself ...
                 if (!configChanges.storageChanged && configChanges.predefinedWorkspacesChanged) refreshWorkspaces();
                 if (configChanges.nameChanged) repositoryNameChanged();
+                if (configChanges.connectorsChanged) {
+                    newState.connectors.restart(config.get().getFederation());
+                }
             }
             logger.debug("Applied changes to '{0}' repository configuration: {1} --> {2}", repositoryName, changes, config);
         } finally {
@@ -499,14 +506,6 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
 
     protected final ChangeJournal journal() {
         return runningState().journal();
-    }
-
-    protected final boolean versioningUsed() {
-        return runningState().repositoryCache().versioningUsed();
-    }
-
-    protected final boolean lockingUsed() {
-        return runningState().repositoryCache().lockingUsed();
     }
     
     protected final boolean mimeTypeDetectionEnabled() {
@@ -713,7 +712,8 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                                                                           FieldName.MINIMUM_BINARY_SIZE_IN_BYTES);
         private final Path NAME_PATH = Paths.path(FieldName.NAME);
         private final Path MONITORING_PATH = Paths.path(FieldName.MONITORING);
-
+        private final Path CONNECTORS_PATH = Paths.path(FieldName.EXTERNAL_SOURCES);
+        
         private final Path[] IGNORE_PATHS = new Path[] {STORAGE_PATH, BINARY_STORAGE_PATH};
 
         protected boolean securityChanged = false;
@@ -729,6 +729,7 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
         protected boolean largeValueChanged = false;
         protected boolean nameChanged = false;
         protected boolean monitoringChanged = false;
+        protected boolean connectorsChanged = false;
 
         @Override
         public void setArrayValue( Path path,
@@ -784,6 +785,7 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
             if (!jndiChanged && path.equals(JNDI_PATH)) jndiChanged = true;
             if (!nameChanged && path.equals(NAME_PATH)) nameChanged = true;
             if (!monitoringChanged && path.equals(MONITORING_PATH)) monitoringChanged = true;
+            if (!connectorsChanged && path.startsWith(CONNECTORS_PATH)) connectorsChanged = true;
         }
     }
 
@@ -1036,15 +1038,9 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                     this.txMgrLookup = config.getTransactionManagerLookup();
                     this.txnMgr = this.txMgrLookup.getTransactionManager();
                     this.transactions = createTransactions(this.txnMgr, schematicDb);
-
-                    List<Component> connectorComponents = config.getFederation().getConnectors(this.problems);
-                    Map<String, List<RepositoryConfiguration.ProjectionConfiguration>> preconfiguredProjectionsByWorkspace = config.getFederation()
-                                                                                                                                   .getProjectionsByWorkspace();
-                    Set<String> extSources = config.getFederation().getExternalSources();
-                    this.connectors = new Connectors(this, connectorComponents, extSources, preconfiguredProjectionsByWorkspace);                    
+                    this.connectors = new Connectors(this, config.getFederation(), problems);                    
                    
                     RepositoryConfiguration.Clustering clustering = config.getClustering();
-                    LockingService startupLockingService = null;
                     long lockTimeoutMillis = config.getLockTimeoutMillis();
                     if (clustering.isEnabled()) {
                         final String clusterName = clustering.getClusterName();
@@ -1054,9 +1050,9 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                         } else {
                             this.clusteringService = ClusteringService.startStandalone(clusterName, clustering.getConfiguration());        
                         }
-                        startupLockingService = new JGroupsLockingService(this.clusteringService.getChannel(), lockTimeoutMillis);
-                        this.lockingService = clustering.useDbLocking() ? 
-                                              new DbLockingService(lockTimeoutMillis, this.schematicDb) : startupLockingService;
+                        this.lockingService = clustering.useDbLocking() ?
+                                              new DbLockingService(lockTimeoutMillis, this.schematicDb) :
+                                              new JGroupsLockingService(this.clusteringService.getChannel(), lockTimeoutMillis);
                     } else {
                         this.clusteringService = null;
                         this.lockingService =  new StandaloneLockingService(lockTimeoutMillis);
@@ -1107,13 +1103,14 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                     }
 
                     // Set up the document store and environment
-                    final RepositoryEnvironment repositoryEnvironment = new JcrRepositoryEnvironment(transactions, lockingService,
+                    final RepositoryEnvironment repositoryEnvironment = new JcrRepositoryEnvironment(transactions,
+                                                                                                     this.lockingService,
                                                                                                      journalId());
                     LocalDocumentStore localStore = new LocalDocumentStore(schematicDb, repositoryEnvironment);
                     this.documentStore = connectors.hasConnectors() ? new FederatedDocumentStore(connectors, localStore) : localStore;
 
                     // Set up the repository cache ...
-                    this.cache = new RepositoryCache(context, documentStore, startupLockingService, config, systemContentInitializer,
+                    this.cache = new RepositoryCache(context, documentStore, config, systemContentInitializer,
                                                      repositoryEnvironment, changeBus, Upgrades.STANDARD_UPGRADES);
 
                     // Set up the node type manager ...
@@ -1135,6 +1132,21 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                             // Read in the built-in node types ...
                             CndImporter importer = new CndImporter(context);
                             importer.importBuiltIns(this.problems);
+                            if (this.problems.hasErrors()) {
+                                Optional<Throwable> cause = StreamSupport.stream(this.problems.spliterator(), false)
+                                                                         .filter(problem -> problem.getThrowable() != null)
+                                                                         .map(Problem::getThrowable)
+                                                                         .findFirst();   
+                                if (cause.isPresent()) {
+                                    // if there is a cause for the failure throw that
+                                    throw cause.get();
+                                }
+                                // if not create a message with all the issues....
+                                String errorMessage = StreamSupport.stream(this.problems.spliterator(), false)
+                                                                   .map(Problem::getMessageString)
+                                                                   .collect(Collectors.joining(System.lineSeparator()));
+                                throw new IllegalStateException(errorMessage);
+                            }
                             this.nodeTypes.registerNodeTypes(importer.getNodeTypeDefinitions(), false, true, true);
                         } catch (RepositoryException re) {
                             throw new IllegalStateException("Could not load node type definition files", re);
@@ -1255,17 +1267,10 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
 
                 // Load the index definitions AFTER the node types were imported ...
                 this.queryManager().getIndexManager().importIndexDefinitions();
-
-                if (repositoryCache().isInitializingRepository()) {
-                    // import initial content for each of the workspaces; this has to be done after the running state has started
-                    this.cache.runOneTimeSystemInitializationOperation(() -> {
-                        for (String workspaceName : repositoryCache().getWorkspaceNames()) {
-                            initialContentImporter().importInitialContent(workspaceName);
-                        }
-                        return null;
-                    });
-                }
-
+    
+                // import initial content for each of the workspaces; this has to be done after the running state has started
+                this.initialContentImporter.initialize();
+                
                 // connectors must be initialized after initial content because that can have an influence on projections
                 this.connectors.initialize();
 
@@ -1274,16 +1279,13 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
                 this.repositoryQueryManager.initialize();
 
                 // Now record in the content that we're finished initializing the repository.
-                // This will commit the startup transaction.
-                repositoryCache().completeInitialization();
-
-                // Now complete the upgrade of the repository, if required. This will be done transactionally.
-                repositoryCache().completeUpgrade(new Upgrades.Context() {
+                // and run any upgrade operation optionally
+                repositoryCache().completeInitialization(new Upgrades.Context() {
                     @Override
                     public RunningState getRepository() {
                         return RunningState.this;
                     }
-
+    
                     @Override
                     public Problems getProblems() {
                         return RunningState.this.problems();
@@ -1393,11 +1395,7 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
         final String journalId() {
             return journal != null ? journal.journalId() : null;
         }
-
-        final ClusteringService clusteringService() {
-            return clusteringService;
-        }
-
+        
         final QueryParsers queryParsers() {
             return queryParsers;
         }
@@ -1417,11 +1415,10 @@ public class JcrRepository implements org.modeshape.jcr.api.Repository {
         protected final MimeTypeDetector mimeTypeDetector() {
             return mimeTypeDetector;
         }
-
-        protected final TextExtractors textExtractors() {
-            return extractors;
+            
+        protected final LocalDocumentStore localDocumentStore() {
+            return documentStore.localStore();
         }
-
         protected final Environment environment() {
             return config.environment();
         }

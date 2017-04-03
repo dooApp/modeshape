@@ -33,7 +33,7 @@ public final class TransactionsHolder {
     }
     
     protected static boolean hasActiveTransaction() {
-        return ACTIVE_TX_ID.get() != null;
+        return activeTransaction() != null;
     }
     
     /**
@@ -47,18 +47,13 @@ public final class TransactionsHolder {
                 RelationalProviderI18n.threadNotAssociatedWithTransaction,
                 Thread.currentThread().getName()));
     }
-    
-    protected static String validateTransaction(String actualTxId) {
-        String expectedTxId = requireActiveTransaction();
-        if (!expectedTxId.equals(actualTxId)) {
-            throw new RelationalProviderException(RelationalProviderI18n.threadAssociatedWithAnotherTransaction, 
-                                                  Thread.currentThread().getName(), expectedTxId, actualTxId);
-        }
-        return expectedTxId;
-    }
-    
+   
     protected static void setActiveTxId(String txId) {
         ACTIVE_TX_ID.set(txId);
+    }
+    
+    protected static String activeTransaction() {
+        return ACTIVE_TX_ID.get();
     }
     
     protected static void clearActiveTransaction() {

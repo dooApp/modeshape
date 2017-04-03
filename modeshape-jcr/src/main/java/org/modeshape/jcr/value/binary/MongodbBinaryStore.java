@@ -19,12 +19,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import org.modeshape.common.annotation.NotThreadSafe;
 import org.modeshape.common.util.IoUtil;
 import org.modeshape.common.util.StringUtil;
 import org.modeshape.jcr.JcrI18n;
@@ -58,29 +60,32 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
     private static final String FIELD_UNUSED = "unused";
     private static final String FIELD_CHUNK_SIZE = "chunk-size";
     private static final String FIELD_CHUNK_BUFFER = "chunk-buffer";
+    private static final String FIELD_CHUNK_POSITION = "chunk-order";
+    private static final String FIELD_CHUNK_VERSION = "chunk-version";
 
     // chunk types
     private static final String CHUNK_TYPE_HEADER = "header";
     private static final String CHUNK_TYPE_DATA_CHUNK = "data";
+    
+    // chunk versions
+    private static final int VERSION_1 = 1;
 
     // keys for chunks(header or data)
-    protected static final BasicDBObject HEADER = new BasicDBObject().append(FIELD_CHUNK_TYPE, CHUNK_TYPE_HEADER);
-    protected static final BasicDBObject DATA_CHUNK = new BasicDBObject().append(FIELD_CHUNK_TYPE, CHUNK_TYPE_DATA_CHUNK);
+    protected static final BasicDBObject HEADER_QUERY = new BasicDBObject().append(FIELD_CHUNK_TYPE, CHUNK_TYPE_HEADER);
+    protected static final BasicDBObject DATA_CHUNK_QUERY = new BasicDBObject().append(FIELD_CHUNK_TYPE, CHUNK_TYPE_DATA_CHUNK);
+    protected static final BasicDBObject DATA_CHUNK_SORT_INDEX = new BasicDBObject().append(FIELD_CHUNK_POSITION, 1);
 
     private FileSystemBinaryStore cache;
 
     // database name
     private String database;
 
-    private String host;
-    private int port;
-
     // credentials
     private String username;
     private String password;
 
-    // server address(es)
-    private Set<String> replicaSet = new HashSet<>();
+    // server address(es) - note that order is important
+    private Set<String> hostAddresses = new LinkedHashSet<>();
 
     // database instance
     private DB db;
@@ -89,36 +94,32 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
     protected int chunkSize = 1024;
     
     /**
-     * Creates a new instance of the store, using a single MongoDB.
-     *
-     * @param host
-     * @param port
-     * @param database
-     */
-    public MongodbBinaryStore( String host,
-                               int port,
-                               String database ) {
-        this(host, port, database, null, null, null);
-    }
-
-    /**
      * Creates a new mongo binary store instance using the supplied params.
      * 
-     * @param host the mongo host; may not be null
-     * @param port the port 
+     * @param host the mongo primary host; may be null in which case {@code hostAddresses} has to be provided
+     * @param port the port of the primary host; may be null in which case {@code hostAddresses} has to be provided
      * @param database the name of the database; may be null in which case a default will be used
      * @param username the username; may be null 
      * @param password the password; may be null
-     * @param replicaSet a {@link Set} of (host:port) pairs representing multiple server addresses; may be null
+     * @param hostAddresses a {@link List} of (host:port) pairs representing multiple server addresses; may be null
      */
-    public MongodbBinaryStore(String host, int port, String database, String username, String password, Set<String> replicaSet) {
+    public MongodbBinaryStore(String host, Integer port, String database, String username, String password, List<String> hostAddresses) {
         this.cache = TransientBinaryStore.get();
-        this.host = Objects.requireNonNull(host);
-        this.port = port;
         this.database = !StringUtil.isBlank(database) ? database : DEFAULT_DB_NAME;
         this.username = username;
         this.password = password;
-        this.replicaSet = replicaSet == null ? Collections.emptySet() : replicaSet;
+        boolean hostAddressesProvided = hostAddresses != null && !hostAddresses.isEmpty();
+        this.hostAddresses = new LinkedHashSet<>();
+        String defaultServer = !StringUtil.isBlank(host) && port != null ? host + ":" + port : null;
+        if (defaultServer == null && !hostAddressesProvided) {
+            throw new IllegalArgumentException("Invalid Mongo binary store configuration: either (host and port) or host addresses have to provided");
+        } 
+        if (defaultServer != null) {
+            this.hostAddresses.add(defaultServer);
+        }
+        if (hostAddressesProvided) {
+            this.hostAddresses.addAll(hostAddresses);
+        }
     }
 
     /**
@@ -126,34 +127,42 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
      *
      * @param addresses list of addresses in text format
      * @return list of mongodb addresses
-     * @throws UnknownHostException when at least one host is unknown
-     * @throws IllegalArgumentException if address has bad format
+     * @throws IllegalArgumentException if address has bad format or is not valid
      */
-    private List<ServerAddress> replicaSet( Set<String> addresses ) throws UnknownHostException {
-        List<ServerAddress> list = new ArrayList<ServerAddress>();
-        for (String address : addresses) {
-            // address has format <host:port>
-            String[] tokens = address.split(":");
-
-            // checking tokens number after split
-            if (tokens.length != 2) {
-                throw new IllegalArgumentException("Wrong address format: " + address);
-            }
-
-            String host = tokens[0];
-
-            // convert port number
-            int port;
-            try {
-                port = Integer.parseInt(tokens[1]);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Wrong address format: " + address);
-            }
-
-            list.add(new ServerAddress(host, port));
+    private List<ServerAddress> convertToServerAddresses(Set<String> addresses)  {
+        return addresses.stream()
+                        .map(this::stringToServerAddress)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+    }
+    
+    private ServerAddress stringToServerAddress(String address) {
+        if (address == null || address.trim().length() == 0) {
+            return null;
         }
-
-        return list;
+        // address has format <host:port>
+        String[] tokens = address.split(":");
+    
+        // checking tokens number after split
+        if (tokens.length != 2) {
+            throw new IllegalArgumentException("Wrong address format: " + address + " (expected host:port)") ;
+        }
+    
+        String host = tokens[0];
+    
+        // convert port number
+        int port;
+        try {
+            port = Integer.parseInt(tokens[1]);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Wrong address format: " + address + " (expected host:port)");
+        }
+    
+        try {
+            return new ServerAddress(host, port);
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     /**
@@ -190,8 +199,10 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
 
             // store content
             DBCollection content = db.getCollection(key.toString());
-            ChunkOutputStream dbStream = markAsUnused ? new ChunkOutputStream(content, System.currentTimeMillis()) : new ChunkOutputStream(
-                                                                                                                                           content);
+            content.createIndex(DATA_CHUNK_SORT_INDEX);
+            ChunkOutputStream dbStream = markAsUnused ? 
+                                         new ChunkOutputStream(content, System.currentTimeMillis()) : 
+                                         new ChunkOutputStream(content);
             try {
                 IoUtil.write(temp.getStream(), dbStream);
             } catch (Exception e) {
@@ -307,7 +318,7 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
             }
             DBCollection collection = db.getCollection(collectionName);
             boolean unused = (Boolean)getAttribute(collection, FIELD_UNUSED);
-            if ((unused && !onlyUsed) || !unused) {
+            if (!unused || !onlyUsed) {
                 storedKeys.add(collectionName);
             }
         }
@@ -333,20 +344,11 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
         }
 
         // connect to database
-        try {
-            MongoClient client = null;
-            if (!replicaSet.isEmpty()) {
-                client = new MongoClient(replicaSet(replicaSet), credentials);
-            } else if (!StringUtil.isBlank(host)) {
-                client = new MongoClient(new ServerAddress(host, port), credentials);
-            } else {
-                client = new MongoClient(new ServerAddress(), credentials);
-            }
-            client.setWriteConcern(WriteConcern.ACKNOWLEDGED);
-            db = client.getDB(database);
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        }
+        MongoClient client = hostAddresses.size() > 1 ?
+                             new MongoClient(convertToServerAddresses(hostAddresses), credentials) :
+                             new MongoClient(stringToServerAddress(hostAddresses.iterator().next()), credentials);
+        client.setWriteConcern(WriteConcern.ACKNOWLEDGED);
+        db = client.getDB(database);
     }
 
     /**
@@ -359,7 +361,7 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
     private void setAttribute( DBCollection content,
                                String fieldName,
                                Object value ) {
-        DBObject header = content.findOne(HEADER);
+        DBObject header = content.findOne(HEADER_QUERY);
         BasicDBObject newHeader = new BasicDBObject();
 
         // clone header
@@ -371,7 +373,7 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
 
         // modify specified field and update record
         newHeader.put(fieldName, value);
-        content.update(HEADER, newHeader);
+        content.update(HEADER_QUERY, newHeader);
     }
 
     /**
@@ -383,7 +385,7 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
      */
     private Object getAttribute( DBCollection content,
                                  String fieldName ) {
-        return content.findOne(HEADER).get(fieldName);
+        return content.findOne(HEADER_QUERY).get(fieldName);
     }
 
     /**
@@ -402,7 +404,8 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
     /**
      * Provide an OutputStream which will write to a database storage.
      */
-    private class ChunkOutputStream extends OutputStream {
+    @NotThreadSafe
+    protected class ChunkOutputStream extends OutputStream {
         // stored content
         private DBCollection content;
 
@@ -410,8 +413,10 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
         private byte[] buffer = new byte[chunkSize];
         // current position in the local buffer
         private int offset;
+        // the position of a chunk with a series of chunks
+        private int position;
 
-        // object for writting chunks into storage
+        // object for writing chunks into storage
         private BasicDBObject chunk = new BasicDBObject();
 
         /**
@@ -427,6 +432,7 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
             BasicDBObject header = new BasicDBObject();
             header.put(FIELD_CHUNK_TYPE, CHUNK_TYPE_HEADER);
             header.put(FIELD_UNUSED, false);
+            header.put(FIELD_CHUNK_VERSION, VERSION_1);
 
             // insert into database
             this.content.insert(header);
@@ -474,12 +480,14 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
                 chunk.put(FIELD_CHUNK_TYPE, CHUNK_TYPE_DATA_CHUNK);
                 chunk.put(FIELD_CHUNK_SIZE, offset);
                 chunk.put(FIELD_CHUNK_BUFFER, buffer);
+                chunk.put(FIELD_CHUNK_POSITION, position);
 
                 // store chink
                 content.insert(chunk);
 
                 // reset (weird thing is that we can't use mutable objects here)
                 offset = 0;
+                position++;
                 chunk = new BasicDBObject();
             }
         }
@@ -488,9 +496,10 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
     /**
      * Provide an InputStream which will read from a database storage.
      */
-    private class ChunkInputStream extends InputStream {
+    @NotThreadSafe
+    protected class ChunkInputStream extends InputStream {
         // list of datachunks
-        private DBCursor cursor;
+        private final DBCursor cursor;
 
         // local buffer and current position inthe buffer
         private byte[] buffer = new byte[chunkSize];
@@ -502,9 +511,29 @@ public class MongodbBinaryStore extends AbstractBinaryStore {
         private int size = 0;
 
         public ChunkInputStream( DBCollection chunks ) {
-            // execute query for selecting data chunks only
-            cursor = chunks.find(DATA_CHUNK);
+            // dynamically create the cursor based on the version
+            cursor = cursorFor(chunks);
         }
+        
+        private DBCursor cursorFor(DBCollection parent) {
+            DBObject header = parent.findOne(HEADER_QUERY);
+            // we should always have a header
+            assert header != null;
+            
+            Object version = header.get(FIELD_CHUNK_VERSION);
+            // we're always interested in data chunks
+            DBCursor result = parent.find(DATA_CHUNK_QUERY);
+            if (version == null) {
+                // no version present
+                return result; 
+            }
+            switch ((Integer) version) {
+                case VERSION_1:
+                    return result.sort(DATA_CHUNK_SORT_INDEX);
+                default:    
+                    throw new IllegalArgumentException("Unknown chunk version " + version);
+            }
+        } 
 
         @Override
         public int read() {

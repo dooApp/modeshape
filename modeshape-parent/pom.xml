@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.modeshape</groupId>
     <artifactId>modeshape-parent</artifactId>
-    <version>5.3-SNAPSHOT</version>
+    <version>5.5-SNAPSHOT</version>
     <name>ModeShape Parent</name>
 
     <url>http://www.modeshape.org</url>
@@ -124,28 +124,27 @@
         <version.javax.jcr>2.0</version.javax.jcr>
         <version.org.mapdb>1.0.9</version.org.mapdb>
         <version.org.apache.jackrabbit>2.6.0</version.org.apache.jackrabbit>
-        <version.org.jboss.jbossts.jta>5.2.16.Final</version.org.jboss.jbossts.jta>
+        <version.org.jboss.jbossts.jta>5.3.3.Final</version.org.jboss.jbossts.jta>
         <version.com.atomikos>3.8.0</version.com.atomikos>
         <version.org.picketbox>4.9.6.Final</version.org.picketbox>
-        <version.com.zaxxer.HikariCP>2.4.3</version.com.zaxxer.HikariCP>
+        <version.com.zaxxer.HikariCP>2.6.1</version.com.zaxxer.HikariCP>
         
         <version.org.jboss.spec.javax.transaction.jboss-transaction-api_1.2_spec>1.0.1.Final</version.org.jboss.spec.javax.transaction.jboss-transaction-api_1.2_spec>
         <version.com.github.ben-manes.caffeine>2.3.3</version.com.github.ben-manes.caffeine>
-        <!--Make sure the jgroups version is the same as the one used by ISPN -->
-        <version.org.jgroups>3.6.8.Final</version.org.jgroups>
+        <version.org.jgroups>3.6.10.Final</version.org.jgroups>
         <jgroups.module.slot>main</jgroups.module.slot>
         
         <version.org.jboss.logging>3.3.0.Final</version.org.jboss.logging>
         <version.org.jboss.spec.javax.servlet.jboss-servlet-api_3.1_spec>1.0.0.Final</version.org.jboss.spec.javax.servlet.jboss-servlet-api_3.1_spec>
         <version.org.jboss.spec.javax.security.jacc>1.0.0.Final</version.org.jboss.spec.javax.security.jacc>
-        <version.org.jboss.resteasy>3.0.16.Final</version.org.jboss.resteasy>
+        <version.org.jboss.resteasy>3.0.19.Final</version.org.jboss.resteasy>
         <version.commons-naming>20031116.223527</version.commons-naming>
-        <version.org.codehaus.jettison>1.3.1</version.org.codehaus.jettison>
+        <version.org.codehaus.jettison>1.3.3</version.org.codehaus.jettison>
         <version.org.apache.httpcomponents>4.4</version.org.apache.httpcomponents>
         <version.com.googlecode.sardine>146</version.com.googlecode.sardine>
         <version.org.javassist>3.18.1-GA</version.org.javassist>
         <version.org.jaudiotagger>2.0.3</version.org.jaudiotagger>
-        <version.org.apache.poi>3.13</version.org.apache.poi>  <!-- Try to match what's in Tika -->
+        <version.org.apache.poi>3.15</version.org.apache.poi>  <!-- Try to match what's in Tika -->
         <version.com.beust.jcommander>1.5</version.com.beust.jcommander>
         <version.wsdl4j>1.6.3</version.wsdl4j>
         <version.de.undercouch.bson4jackson>1.1.2</version.de.undercouch.bson4jackson>
@@ -170,9 +169,9 @@
         <version.org.eclipse.emf.ecore-change>2.2.3</version.org.eclipse.emf.ecore-change>
         <version.org.eclipse.emf.ecore-xmi>2.4.1</version.org.eclipse.emf.ecore-xmi>
         <!-- nightmare end -->        
-        <version.org.apache.tika>1.12</version.org.apache.tika>
+        <version.org.apache.tika>1.14</version.org.apache.tika>
         <version.com.drewnoakes.metadata-extractor>2.6.2</version.com.drewnoakes.metadata-extractor>
-        <version.org.apache.lucene>6.0.0</version.org.apache.lucene>
+        <version.org.apache.lucene>6.4.1</version.org.apache.lucene>
         <version.io.humble>0.2.1</version.io.humble>
         <version.org.apache.chemistry.opencmis>1.0.0</version.org.apache.chemistry.opencmis>
         <version.org.apache.chemistry.opencmis.server.jcr>0.11.0</version.org.apache.chemistry.opencmis.server.jcr>
@@ -184,21 +183,23 @@
         <version.org.jboss.ironjacamar>1.0.13.Final</version.org.jboss.ironjacamar>
         <version.com.datastax.cassandra>2.0.0-rc2</version.com.datastax.cassandra>
         <version.org.apache.cassandra>2.0.3</version.org.apache.cassandra>
-        <version.org.apache.pdfbox>1.8.10</version.org.apache.pdfbox>
+        <version.org.apache.pdfbox>2.0.3</version.org.apache.pdfbox>
         
         <version.com.h2>1.4.191</version.com.h2>
         <version.postgresql.9>9.2-1002.jdbc4</version.postgresql.9>
         <version.mysql>5.1.39</version.mysql>
         <version.com.oracle>11.2.0.1.0</version.com.oracle>
         <version.com.amazonaws>1.11.24</version.com.amazonaws>
+        <version.com.microsoft.sqlserver.mssql-jdbc>6.1.0.jre8</version.com.microsoft.sqlserver.mssql-jdbc>
 
         <version.docker.postgresql>9.5.4</version.docker.postgresql>
         <version.docker.mysql>5.7</version.docker.mysql>
         <version.docker.oracle>16.04</version.docker.oracle>
+        <version.docker.sqlserver>latest</version.docker.sqlserver> <!-- currently there are no tags for this image -->
               
         <!--Properties which must be used when installing locally a server ZIP distribution -->
-        <version.org.wildfly>10.0.0.Final</version.org.wildfly>
-        <version.org.wildfly.core>2.0.10.Final</version.org.wildfly.core>
+        <version.org.wildfly>10.1.0.Final</version.org.wildfly>
+        <version.org.wildfly.core>2.2.0.Final</version.org.wildfly.core>
 
         <!-- The id of the maven distribution which is building the current wf kit -->
         <wf.dist.id>jboss-wf-dist</wf.dist.id>
@@ -214,7 +215,8 @@
         <!-- Make sure the version of the bundle plugin is at least this, otherwise it will fork like crazy...-->
         <version.bundle.plugin>3.0.0</version.bundle.plugin>
         <version.gwt.maven.plugin>2.5.1</version.gwt.maven.plugin>
-        <version.org.wildfly.plugings.wildfly-maven-plugin>1.0.2.Final</version.org.wildfly.plugings.wildfly-maven-plugin>
+        <version.org.wildfly.plugings.wildfly-maven-plugin>1.1.0.Final</version.org.wildfly.plugings.wildfly-maven-plugin>
+        <version.fabric8.docker.plugin>0.19.0</version.fabric8.docker.plugin>
         <version.org.elasticsearch>2.1.0</version.org.elasticsearch>
         <version.jna>4.1.0</version.jna>
         <!--The name of the modeshape-client artifact used by tools-->
@@ -306,7 +308,7 @@
                 <database.url>jdbc:h2:file:./target/db</database.url>
                 <database.username>sa</database.username>
                 <database.password/>
-                <docker.image/>
+                <docker.filter/>
             </properties>
         </profile>
 
@@ -324,8 +326,9 @@
                 <database.username>mysql</database.username>
                 <database.password>mysql</database.password>
                 <database.driver>com.mysql.jdbc.Driver</database.driver>
-                <database.url>jdbc:mysql://${docker.host.address}:3306/${database.name}?autoReconnect=true&amp;useSSL=false</database.url>
-                <docker.image>modeshape-mysql</docker.image>
+                <database.port>3306</database.port>
+                <database.url>jdbc:mysql://${docker.host.address}:${database.port}/${database.name}?autoReconnect=true&amp;useSSL=false</database.url>
+                <docker.filter>mysql/mysql-server:${version.docker.mysql}</docker.filter>
             </properties>
             <dependencies>
                 <dependency>
@@ -350,8 +353,9 @@
                 <database.username>postgres</database.username>
                 <database.password>postgres</database.password>
                 <database.driver>org.postgresql.Driver</database.driver>
-                <database.url>jdbc:postgresql://${docker.host.address}:5432/${database.name}</database.url>
-                <docker.image>modeshape-postgres</docker.image>
+                <database.port>5432</database.port>
+                <database.url>jdbc:postgresql://${docker.host.address}:${database.port}/${database.name}</database.url>
+                <docker.filter>postgres:${version.docker.postgresql}</docker.filter>
             </properties>
             <dependencies>
                 <dependency>
@@ -376,14 +380,42 @@
                 <database.username>system</database.username>
                 <database.password>oracle</database.password>
                 <database.driver>oracle.jdbc.OracleDriver</database.driver>
-                <database.url>jdbc:oracle:thin:@${docker.host.address}:49161:xe</database.url>
-                <docker.image>modeshape-oracle</docker.image>
+                <database.port1>49161</database.port1>
+                <database.port2>49160</database.port2>
+                <database.url>jdbc:oracle:thin:@${docker.host.address}:${database.port1}:xe</database.url>
+                <docker.filter>wnameless/oracle-xe-11g:${version.docker.oracle}</docker.filter>
             </properties>
             <dependencies>
                 <dependency>
                     <groupId>com.oracle</groupId>
                     <artifactId>ojdbc6</artifactId>
                     <version>${version.com.oracle}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        
+        <profile>
+            <id>sqlserver</id>
+            <activation>
+                <property>
+                    <name>database</name>
+                    <value>sqlserver</value>
+                </property>
+            </activation>
+            <properties>
+                <database>sqlserver</database>
+                <database.username>sa</database.username>
+                <database.password>Password!</database.password>
+                <database.driver>com.microsoft.sqlserver.jdbc.SQLServerDriver</database.driver>
+                <database.port>1433</database.port>
+                <database.url>jdbc:sqlserver://${docker.host.address}:${database.port}</database.url>
+                <docker.filter>microsoft/mssql-server-linux:${version.docker.sqlserver}</docker.filter>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>com.microsoft.sqlserver</groupId>
+                    <artifactId>mssql-jdbc</artifactId>
+                    <version>${version.com.microsoft.sqlserver.mssql-jdbc}</version>
                 </dependency>
             </dependencies>
         </profile>
@@ -411,6 +443,16 @@
           -->
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-report-plugin</artifactId>
+                    <version>${version.surefire.plugin}</version>
+                    <configuration>
+                        <showSuccess>true</showSuccess>
+                        <outputDirectory>${project.build.directory}/surefire-reports</outputDirectory>
+                        <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+                    </configuration>
+                </plugin>
                 <!--
                         Fixes how test resources of a project can be used in projects
                         dependent on it
@@ -535,7 +577,7 @@
                 <plugin>
                     <groupId>io.fabric8</groupId>
                     <artifactId>docker-maven-plugin</artifactId>
-                    <version>0.14.1</version>
+                    <version>${version.fabric8.docker.plugin}</version>
                     <configuration>
                         <watchInterval>500</watchInterval>
                         <logDate>default</logDate>
@@ -544,16 +586,15 @@
                         <images>
                             <image>
                                 <name>postgres:${version.docker.postgresql}</name>
-                                <alias>modeshape-postgres</alias>
                                 <run>
-                                    <namingStrategy>alias</namingStrategy>
+                                    <namingStrategy>none</namingStrategy>
                                     <env>
                                         <POSTGRES_DB>${database.name}</POSTGRES_DB>
                                         <POSTGRES_USER>${database.username}</POSTGRES_USER>
                                         <POSTGRES_PASSWORD>${database.password}</POSTGRES_PASSWORD>
                                     </env>
                                     <ports>
-                                        <port>5432:5432</port>
+                                        <port>${database.port}:5432</port>
                                     </ports>
                                     <log>
                                         <prefix>postgress</prefix>
@@ -568,9 +609,8 @@
                             </image>
                             <image>
                                 <name>mysql/mysql-server:${version.docker.mysql}</name>
-                                <alias>modeshape-mysql</alias>
                                 <run>
-                                    <namingStrategy>alias</namingStrategy>
+                                    <namingStrategy>none</namingStrategy>
                                     <env>
                                         <MYSQL_ROOT_PASSWORD>modeshape</MYSQL_ROOT_PASSWORD>
                                         <MYSQL_DATABASE>${database.name}</MYSQL_DATABASE>
@@ -578,7 +618,7 @@
                                         <MYSQL_PASSWORD>${database.password}</MYSQL_PASSWORD>
                                     </env>
                                     <ports>
-                                        <port>3306:3306</port>
+                                        <port>${database.port}:3306</port>
                                     </ports>
                                     <log>
                                         <prefix>mysql</prefix>
@@ -593,15 +633,14 @@
                             </image>
                             <image>
                                 <name>wnameless/oracle-xe-11g:${version.docker.oracle}</name>
-                                <alias>modeshape-oracle</alias>
                                 <run>
-                                    <namingStrategy>alias</namingStrategy>
+                                    <namingStrategy>none</namingStrategy>
                                     <env>
                                         <ORACLE_ALLOW_REMOTE>true</ORACLE_ALLOW_REMOTE>
                                     </env>
                                     <ports>
-                                        <port>49160:22</port>
-                                        <port>49161:1521</port>
+                                        <port>${database.port2}:22</port>
+                                        <port>${database.port1}:1521</port>
                                     </ports>
                                     <log>
                                         <prefix>oracle</prefix>
@@ -611,6 +650,28 @@
                                     <wait>
                                         <log>/usr/sbin/startup.sh: ignoring /docker-entrypoint-initdb.d/*</log>
                                         <time>300000</time> 
+                                    </wait>
+                                </run>
+                            </image>   
+                            <image>
+                                <name>microsoft/mssql-server-linux:${version.docker.sqlserver}</name>
+                                <run>
+                                    <namingStrategy>none</namingStrategy>
+                                    <env>
+                                        <ACCEPT_EULA>Y</ACCEPT_EULA>
+                                        <SA_PASSWORD>${database.password}</SA_PASSWORD>
+                                    </env>
+                                    <ports>
+                                        <port>${database.port}:1433</port>
+                                    </ports>
+                                    <log>
+                                        <prefix>sqlserver</prefix>
+                                        <enabled>true</enabled>
+                                        <color>yellow</color>
+                                    </log>
+                                    <wait>
+                                        <log>SQL Server is now ready for client connections</log>
+                                        <time>120000</time>
                                     </wait>
                                 </run>
                             </image>
@@ -1693,11 +1754,11 @@
                     <exclusion>
                         <groupId>com.healthmarketscience.jackcess</groupId>
                         <artifactId>jackcess</artifactId>
-                    </exclusion> 
+                    </exclusion>
                     <exclusion>
                         <groupId>com.healthmarketscience.jackcess</groupId>
                         <artifactId>jackcess-encrypt</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>org.codelibs</groupId>
                         <artifactId>jhighlight</artifactId>
@@ -1705,27 +1766,31 @@
                     <exclusion>
                         <groupId>org.apache.cxf</groupId>
                         <artifactId>cxf-rt-rs-client</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.opennlp</groupId>
                         <artifactId>opennlp-tools</artifactId>
-                    </exclusion> 
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.opennlp</groupId>
                         <artifactId>opennlp-tools</artifactId>
-                    </exclusion> 
+                    </exclusion>
                     <exclusion>
                         <groupId>org.json</groupId>
                         <artifactId>json</artifactId>
-                    </exclusion>   
+                    </exclusion>
                     <exclusion>
                         <groupId>com.google.code.gson</groupId>
                         <artifactId>gson</artifactId>
-                    </exclusion>   
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.googlecode.json-simple</groupId>
+                        <artifactId>json-simple</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.sis.core</groupId>
                         <artifactId>sis-utility</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.sis.core</groupId>
                         <artifactId>sis-metadata</artifactId>
@@ -1733,11 +1798,11 @@
                     <exclusion>
                         <groupId>org.apache.sis.storage</groupId>
                         <artifactId>sis-netcdf</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>org.opengis</groupId>
                         <artifactId>geoapi</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>com.googlecode.mp4parser</groupId>
                         <artifactId>isoparser</artifactId>
@@ -1745,7 +1810,7 @@
                     <exclusion>
                         <groupId>com.github.junrar</groupId>
                         <artifactId>junrar</artifactId>
-                    </exclusion> 
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.commons</groupId>
                         <artifactId>commons-csv</artifactId>
@@ -1765,15 +1830,15 @@
                     <exclusion>
                         <groupId>edu.ucar</groupId>
                         <artifactId>netcdf4</artifactId>
-                    </exclusion>   
+                    </exclusion>
                     <exclusion>
                         <groupId>edu.ucar</groupId>
                         <artifactId>grib</artifactId>
-                    </exclusion>    
+                    </exclusion>
                     <exclusion>
                         <groupId>edu.ucar</groupId>
                         <artifactId>cdm</artifactId>
-                    </exclusion>  
+                    </exclusion>
                     <exclusion>
                         <groupId>edu.ucar</groupId>
                         <artifactId>httpservices</artifactId>
@@ -1814,12 +1879,12 @@
                     We exclude them by default. 
                     -->
                     <exclusion>
-                      <groupId>org.bouncycastle</groupId>
-                      <artifactId>bcmail-jdk15on</artifactId>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcmail-jdk15on</artifactId>
                     </exclusion>
                     <exclusion>
-                      <groupId>org.bouncycastle</groupId>
-                      <artifactId>bcprov-jdk15on</artifactId>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcprov-jdk15on</artifactId>
                     </exclusion>
                     <!--
                     Outlook PST files for emails are likely not used,
@@ -1830,12 +1895,18 @@
                         <artifactId>java-libpst</artifactId>
                     </exclusion>
                     <!--
-                    Matlab files are likely not used,
-                    so exclude this library by default.
+                   Matlab files are likely not used, so exclude this library by default.
+                   -->
+                    <exclusion>
+                        <groupId>org.tallison</groupId>
+                        <artifactId>jmatio</artifactId>
+                    </exclusion>
+                    <!--
+                        PDF box tools not required
                     -->
                     <exclusion>
-                        <groupId>net.sourceforge.jmatio</groupId>
-                        <artifactId>jmatio</artifactId>
+                        <groupId>org.apache.pdfbox</groupId>
+                        <artifactId>pdfbox-tools</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1925,47 +1996,12 @@
                 <groupId>org.jboss.ironjacamar</groupId>
                 <artifactId>ironjacamar-depchain</artifactId>
                 <version>${version.org.jboss.ironjacamar}</version>
+                <scope>test</scope>
                 <type>pom</type>
             </dependency>
             <dependency>
                 <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-spec-api</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>provided</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-common-api</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-common-spi</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-common-impl</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
                 <artifactId>ironjacamar-common-impl-papaki</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-core-api</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-core-impl</artifactId>
                 <version>${version.org.jboss.ironjacamar}</version>
                 <scope>test</scope>
             </dependency>
@@ -1993,13 +2029,6 @@
                 <version>${version.org.jboss.ironjacamar}</version>
                 <scope>test</scope>
             </dependency>
-            <dependency>
-                <groupId>org.jboss.ironjacamar</groupId>
-                <artifactId>ironjacamar-validator</artifactId>
-                <version>${version.org.jboss.ironjacamar}</version>
-                <scope>test</scope>
-            </dependency>
-
 
             <!--
                 Atomikos Transaction Manager (for testing only)
@@ -2065,14 +2094,4 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-
-    <reporting>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-report-plugin</artifactId>
-                <version>${version.surefire.plugin}</version>
-            </plugin>
-        </plugins>
-    </reporting>
 </project>

@@ -29,11 +29,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CyclicBarrier;
@@ -533,26 +535,7 @@ public class JcrRepositoryTest {
     protected JcrSession createSession( final String workspace ) throws Exception {
         return repository.login(workspace);
     }
-
-    @Ignore( "GC behavior is non-deterministic from the application's POV - this test _will_ occasionally fail" )
-    @Test
-    public void shouldAllowManySessionLoginsAndLogouts() throws Exception {
-        Session session = null;
-        for (int i = 0; i < 10000; i++) {
-            session = repository.login();
-            session.logout();
-        }
-
-        session = repository.login();
-        session = null;
-
-        // Give the gc a chance to run
-        System.gc();
-        Thread.sleep(100);
-
-        assertThat(repository.runningState().activeSessionCount(), is(0));
-    }
-
+    
     @Test
     @FixFor( "MODE-2190" )
     public void shouldCleanupLocks() throws Exception {
@@ -580,9 +563,9 @@ public class JcrRepositoryTest {
         sessionLockedNode2.addMixin("mix:lockable");
         locker2.save();
 
-        locker2.getWorkspace().getLockManager().lock(sessionLockedNode2.getPath(), false, true, 1, "me");
+        locker2.getWorkspace().getLockManager().lock(sessionLockedNode2.getPath(), false, true, Long.MAX_VALUE, "me");
         assertEquals(Long.MAX_VALUE, locker2.getWorkspace().getLockManager().getLock("/sessionLockedNode2").getSecondsRemaining());
-        assertEquals(Long.MIN_VALUE, locker1.getWorkspace().getLockManager().getLock("/sessionLockedNode2").getSecondsRemaining());
+        assertEquals(Long.MAX_VALUE, locker1.getWorkspace().getLockManager().getLock("/sessionLockedNode2").getSecondsRemaining());
 
         assertLocking(locker2, "/openLockedNode", true);
         assertLocking(locker2, "/sessionLockedNode1", true);
@@ -1425,35 +1408,7 @@ public class JcrRepositoryTest {
             session.logout();
         }
     }
-
-    @Test
-    @FixFor( "MODE-2277" )
-    public void shouldUpdateVersioningUsageFlag() throws Exception {
-        assertFalse(repository.repositoryCache().versioningUsed());
-        session = createSession();
-        session.getRootNode().addNode("node");
-        session.save();
-
-        Node nod2 = session.getRootNode().addNode("versionableNode");
-        nod2.addMixin("mix:versionable");
-        session.save();
-        //pre-save should already have initialized the version history
-        assertTrue(repository.repositoryCache().versioningUsed());
-    }
-
-    @Test
-    @FixFor( "MODE-2277" )
-    public void shouldUpdateLockingUsageFlag() throws Exception {
-        assertFalse(repository.repositoryCache().lockingUsed());
-        session = createSession();
-        Node node1 = session.getRootNode().addNode("node");
-        node1.addMixin("mix:lockable");
-        session.save();
-        assertFalse(repository.repositoryCache().lockingUsed());
-        session.lockManager().lock("/node", false, true, -1, null);
-        assertTrue(repository.repositoryCache().lockingUsed());
-    }
-
+    
     @Test
     @FixFor( "MODE-2343" )
     public void shouldReleaseObservationManagerThreadsOnLogout() throws Exception {
@@ -1526,6 +1481,25 @@ public class JcrRepositoryTest {
         repository.determineInitialDelay("22:00");
         repository.determineInitialDelay("23:00");
     }
+    
+    @Test
+    @FixFor("MODE-2679")
+    public void shouldStartRepositoryUpForTurkishLocale() throws Exception {
+        Locale current = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr"));
+            shutdownDefaultRepository();
+            repository = TestingUtil.startRepositoryWithConfig("config/repo-config-query-placeholder.json");
+            session = repository.login();
+            session.getRootNode().addNode("Ii");
+            session.save();
+            assertNotNull(session.getNode("/Ii"));
+            assertTrue(repository.shutdown().get());  
+        } finally { 
+            Locale.setDefault(current);
+        }
+    }
+    
 
     protected void nodeExists( Session session,
                                String parentPath,

@@ -607,6 +607,7 @@
                 <xs:documentation>The maximum size of the DB connection pool</xs:documentation>
             </xs:annotation>
         </xs:attribute>
+        <xs:anyAttribute namespace="##any" processContents="lax"/>
     </xs:complexType>
 
     <xs:complexType name="file-persistence">
@@ -1054,12 +1055,12 @@
         </xs:attribute>
     </xs:attributeGroup> 
     <xs:attributeGroup name="mongo-storage-attributes">
-        <xs:attribute name="host" type="xs:string" use="required">
+        <xs:attribute name="host" type="xs:string" use="optional">
             <xs:annotation>
                 <xs:documentation>The MongoDB host name</xs:documentation>
             </xs:annotation>
         </xs:attribute>
-        <xs:attribute name="port" type="xs:integer" use="required">
+        <xs:attribute name="port" type="xs:integer" use="optional">
             <xs:annotation>
                 <xs:documentation>The MongoDB port number</xs:documentation>
             </xs:annotation>
@@ -1078,6 +1079,11 @@
             <xs:annotation>
                 <xs:documentation>The DB user password</xs:documentation>
             </xs:annotation>
+        </xs:attribute>   
+        <xs:attribute name="host-addresses" type="xs:string" use="optional">
+            <xs:annotation>
+                <xs:documentation>The comma-separated list of hostname:port pairs for the servers which make up a MongoDB replica set</xs:documentation>
+            </xs:annotation>
         </xs:attribute>
     </xs:attributeGroup>
     <xs:attributeGroup name="s3-storage-attributes">
@@ -1092,6 +1098,11 @@
             </xs:annotation>
         </xs:attribute>
         <xs:attribute name="bucket-name" type="xs:string" use="optional">
+            <xs:annotation>
+                <xs:documentation>The bucket name</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="endpoint-url" type="xs:string" use="optional">
             <xs:annotation>
                 <xs:documentation>The bucket name</xs:documentation>
             </xs:annotation>

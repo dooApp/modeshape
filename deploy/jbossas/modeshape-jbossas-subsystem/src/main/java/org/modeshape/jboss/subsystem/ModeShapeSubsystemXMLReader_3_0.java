@@ -20,6 +20,7 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 import static org.jboss.as.controller.parsing.ParseUtils.requireNoAttributes;
+
 import java.util.ArrayList;
 import java.util.List;
 import javax.xml.stream.XMLStreamConstants;
@@ -371,7 +372,9 @@ public class ModeShapeSubsystemXMLReader_3_0 implements XMLStreamConstants, XMLE
                         ModelAttributes.POOL_SIZE.parseAndSetParameter(attrValue, persistence, reader);
                         break;
                     default:
-                        throw ParseUtils.unexpectedAttribute(reader, i);
+                        // extra attributes are allowed
+                        persistence.get(ModelKeys.PROPERTIES).add(attrName, attrValue);
+                        break;
                 }
             }
         }
@@ -814,6 +817,9 @@ public class ModeShapeSubsystemXMLReader_3_0 implements XMLStreamConstants, XMLE
                     case PASSWORD:
                         ModelAttributes.MONGO_PASSWORD.parseAndSetParameter(attrValue, storageType, reader);
                         break;
+                    case HOST_ADDRESSES:
+                        ModelAttributes.MONGO_HOST_ADDRESSES.parseAndSetParameter(attrValue, storageType, reader);
+                        break;
                     case MIN_VALUE_SIZE:
                         ModelAttributes.MINIMUM_BINARY_SIZE.parseAndSetParameter(attrValue, storageType, reader);
                         break;
@@ -854,9 +860,12 @@ public class ModeShapeSubsystemXMLReader_3_0 implements XMLStreamConstants, XMLE
                         break;
                     case USERNAME:
                         ModelAttributes.S3_USERNAME.parseAndSetParameter(attrValue, storageType, reader);
-                        break;
+                    break;
                     case PASSWORD:
                         ModelAttributes.S3_PASSWORD.parseAndSetParameter(attrValue, storageType, reader);
+                    break;
+                    case ENDPOINT_URL:
+                        ModelAttributes.S3_ENDPOINT_URL.parseAndSetParameter(attrValue, storageType, reader);
                         break;
                     case MIN_VALUE_SIZE:
                         ModelAttributes.MINIMUM_BINARY_SIZE.parseAndSetParameter(attrValue, storageType, reader);

@@ -5,12 +5,14 @@ We hope you enjoy it!
 
 ## What's new
 
-This release addresses 13 bugs and 5 enhancements, most notably:
-- add minimal partition support so that in case of network partitions a cluster of ModeShape repositories won't corrupt data
+This release addresses 19 bugs and 4 enhancements, most notably:
+- adding support for pass-through configuration properties for the Hikari connection pool (see [MODE-2674](https://issues.jboss.org/browse/MODE-2674)) 
 
-- update CMIS to use OpenCMIS 1.0 and also support ACLs for the CMIS connector 
+- fixing a number of transaction and clustering related issues 
 
-- store binary files in Amazon S3
+- upgrading the Wildfly support to the Wildfly 10.1.0.Final 
+
+- adding generic Amazon S3 support for binary storage
 
 ## Migrating from ModeShape 3 or ModeShape 4 
 

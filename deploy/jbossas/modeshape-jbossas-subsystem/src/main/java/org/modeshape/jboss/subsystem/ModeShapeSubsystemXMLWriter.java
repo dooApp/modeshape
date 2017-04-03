@@ -132,6 +132,13 @@ public class ModeShapeSubsystemXMLWriter implements XMLStreamConstants, XMLEleme
             ModelAttributes.FETCH_SIZE.marshallAsAttribute(persistence, false, writer);
             ModelAttributes.POOL_SIZE.marshallAsAttribute(persistence, false, writer);
             ModelAttributes.PERSISTENCE_DS_JNDI_NAME.marshallAsAttribute(persistence, false, writer);
+            // Write out any extra properties ...
+            if (has(persistence, ModelKeys.PROPERTIES)) {
+                ModelNode properties = persistence.get(ModelKeys.PROPERTIES);
+                for (Property property : properties.asPropertyList()) {
+                    writer.writeAttribute(property.getName(), property.getValue().asString());
+                }
+            }
             writer.writeEndElement();
         }
         
@@ -340,6 +347,7 @@ public class ModeShapeSubsystemXMLWriter implements XMLStreamConstants, XMLEleme
             ModelAttributes.MONGO_DATABASE.marshallAsAttribute(storage, false, writer);
             ModelAttributes.MONGO_USERNAME.marshallAsAttribute(storage, false, writer);
             ModelAttributes.MONGO_PASSWORD.marshallAsAttribute(storage, false, writer);
+            ModelAttributes.MONGO_HOST_ADDRESSES.marshallAsAttribute(storage, false, writer);
             writer.writeEndElement();
         } else if (ModelKeys.S3_BINARY_STORAGE.equals(storageType)) {
             writer.writeStartElement(Element.S3_BINARY_STORAGE.getLocalName());
@@ -349,6 +357,7 @@ public class ModeShapeSubsystemXMLWriter implements XMLStreamConstants, XMLEleme
             ModelAttributes.S3_BUCKET_NAME.marshallAsAttribute(storage, false, writer);
             ModelAttributes.S3_USERNAME.marshallAsAttribute(storage, false, writer);
             ModelAttributes.S3_PASSWORD.marshallAsAttribute(storage, false, writer);
+            ModelAttributes.S3_ENDPOINT_URL.marshallAsAttribute(storage, false, writer);
             writer.writeEndElement();
         } else if (ModelKeys.COMPOSITE_BINARY_STORAGE.equals(storageType)) {
             writer.writeStartElement(Element.COMPOSITE_BINARY_STORAGE.getLocalName());

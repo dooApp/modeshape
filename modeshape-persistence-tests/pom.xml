@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.modeshape</groupId>
         <artifactId>modeshape-parent</artifactId>
-        <version>5.3-SNAPSHOT</version>
+        <version>5.5-SNAPSHOT</version>
         <relativePath>../modeshape-parent</relativePath>
     </parent>
 
@@ -62,8 +62,6 @@
             <artifactId>mysql-connector-java</artifactId>
             <version>${version.mysql}</version>
         </dependency>
-
-
                                         
         <!--
         These following are defined as 'provided' in the parent POM, since ModeShape
@@ -187,8 +185,9 @@
                 <database.username>mysql</database.username>
                 <database.password>mysql</database.password>
                 <database.driver>com.mysql.jdbc.Driver</database.driver>
-                <database.url>jdbc:mysql://${docker.host.address}:3306/${database.name}?autoReconnect=true&amp;useSSL=false</database.url>
-                <docker.image>modeshape-mysql</docker.image>
+                <database.port>6603</database.port>
+                <database.url>jdbc:mysql://${docker.host.address}:${database.port}/${database.name}?autoReconnect=true&amp;useSSL=false</database.url>
+                <docker.filter>mysql/mysql-server:${version.docker.mysql}</docker.filter>
             </properties>
             <dependencies>
                 <dependency>
@@ -200,7 +199,7 @@
         </profile>
         <!--
             Define these as empty with the same name as the ones from the parent POM to deactivate the default profile
-            for this module which runs PostgreSQL
+            for this module
          -->
         <profile>
             <id>postgresql9</id>
@@ -209,24 +208,44 @@
             <id>oracle11g</id>
         </profile>
         <profile>
+            <id>sqlserver</id>
+        </profile>
+        <profile>
             <id>all-databases</id>
             <properties>
+                <docker.filter>
+                    postgres:${version.docker.postgresql},
+                    mysql/mysql-server:${version.docker.mysql},
+                    wnameless/oracle-xe-11g:${version.docker.oracle},
+                    microsoft/mssql-server-linux:${version.docker.sqlserver}
+                </docker.filter>
+
                 <oracle.database.username>system</oracle.database.username>
                 <oracle.database.password>oracle</oracle.database.password>
                 <oracle.database.driver>oracle.jdbc.OracleDriver</oracle.database.driver>
-                <oracle.database.url>jdbc:oracle:thin:@${docker.host.address}:49161:xe</oracle.database.url>
+                <oracle.database.port1>49161</oracle.database.port1>
+                <oracle.database.port2>49160</oracle.database.port2>
+                <oracle.database.url>jdbc:oracle:thin:@${docker.host.address}:${oracle.database.port1}:xe</oracle.database.url>
 
                 <postgres.database.name>modeshape_db</postgres.database.name>
                 <postgres.database.username>ms_user</postgres.database.username>
                 <postgres.database.password>ms_password</postgres.database.password>
                 <postgres.database.driver>org.postgresql.Driver</postgres.database.driver>
-                <postgres.database.url>jdbc:postgresql://${docker.host.address}:5432/${postgres.database.name}</postgres.database.url>
+                <postgres.database.port>5432</postgres.database.port>
+                <postgres.database.url>jdbc:postgresql://${docker.host.address}:${postgres.database.port}/${postgres.database.name}</postgres.database.url>
 
                 <mysql.database.name>modeshape_db</mysql.database.name>
                 <mysql.database.username>ms_user</mysql.database.username>
                 <mysql.database.password>ms_password</mysql.database.password>
                 <mysql.database.driver>com.mysql.jdbc.Driver</mysql.database.driver>
-                <mysql.database.url>jdbc:mysql://${docker.host.address}:3306/${mysql.database.name}?autoReconnect=true&amp;useSSL=false</mysql.database.url>
+                <mysql.database.port>3306</mysql.database.port>
+                <mysql.database.url>jdbc:mysql://${docker.host.address}:${mysql.database.port}/${mysql.database.name}?autoReconnect=true&amp;useSSL=false</mysql.database.url>
+
+                <sqlserver.database.username>sa</sqlserver.database.username>
+                <sqlserver.database.password>Password!</sqlserver.database.password>
+                <sqlserver.database.driver>com.microsoft.sqlserver.jdbc.SQLServerDriver</sqlserver.database.driver>
+                <sqlserver.database.port>1433</sqlserver.database.port>
+                <sqlserver.database.url>jdbc:sqlserver://${docker.host.address}:${sqlserver.database.port}</sqlserver.database.url>
             </properties>
             <dependencies>
                 <dependency>
@@ -245,6 +264,11 @@
                     <artifactId>ojdbc6</artifactId>
                     <version>${version.com.oracle}</version>
                 </dependency>
+                <dependency>
+                    <groupId>com.microsoft.sqlserver</groupId>
+                    <artifactId>mssql-jdbc</artifactId>
+                    <version>${version.com.microsoft.sqlserver.mssql-jdbc}</version>
+                </dependency>
             </dependencies>
             <build>
                 <plugins>
@@ -258,20 +282,18 @@
                             <watchInterval>500</watchInterval>
                             <logDate>default</logDate>
                             <verbose>true</verbose>
-                            <autoPull>always</autoPull>
                             <images>
                                 <image>
                                     <name>postgres:${version.docker.postgresql}</name>
-                                    <alias>modeshape-postgres</alias>
                                     <run>
-                                        <namingStrategy>alias</namingStrategy>
+                                        <namingStrategy>none</namingStrategy>
                                         <env>
                                             <POSTGRES_DB>${postgres.database.name}</POSTGRES_DB>
                                             <POSTGRES_USER>${postgres.database.username}</POSTGRES_USER>
                                             <POSTGRES_PASSWORD>${postgres.database.password}</POSTGRES_PASSWORD>
                                         </env>
                                         <ports>
-                                            <port>5432:5432</port>
+                                            <port>${postgres.database.port}:5432</port>
                                         </ports>
                                         <log>
                                             <prefix>postgress</prefix>
@@ -296,7 +318,7 @@
                                             <MYSQL_PASSWORD>${mysql.database.password}</MYSQL_PASSWORD>
                                         </env>
                                         <ports>
-                                            <port>3306:3306</port>
+                                            <port>${mysql.database.port}:3306</port>
                                         </ports>
                                         <log>
                                             <prefix>mysql</prefix>
@@ -318,8 +340,8 @@
                                             <ORACLE_ALLOW_REMOTE>true</ORACLE_ALLOW_REMOTE>
                                         </env>
                                         <ports>
-                                            <port>49160:22</port>
-                                            <port>49161:1521</port>
+                                            <port>${oracle.database.port2}:22</port>
+                                            <port>${oracle.database.port1}:1521</port>
                                         </ports>
                                         <log>
                                             <prefix>oracle</prefix>
@@ -329,6 +351,28 @@
                                         <wait>
                                             <log>/usr/sbin/startup.sh: ignoring /docker-entrypoint-initdb.d/*</log>
                                             <time>300000</time>
+                                        </wait>
+                                    </run>
+                                </image>
+                                <image>
+                                    <name>microsoft/mssql-server-linux:${version.docker.sqlserver}</name>
+                                    <run>
+                                        <namingStrategy>none</namingStrategy>
+                                        <env>
+                                            <ACCEPT_EULA>Y</ACCEPT_EULA>
+                                            <SA_PASSWORD>${sqlserver.database.password}</SA_PASSWORD>
+                                        </env>
+                                        <ports>
+                                            <port>${sqlserver.database.port}:1433</port>
+                                        </ports>
+                                        <log>
+                                            <prefix>sqlserver</prefix>
+                                            <enabled>true</enabled>
+                                            <color>yellow</color>
+                                        </log>
+                                        <wait>
+                                            <log>SQL Server is now ready for client connections</log>
+                                            <time>120000</time>
                                         </wait>
                                     </run>
                                 </image>
@@ -378,6 +422,20 @@
                                         <db.url>${oracle.database.url}</db.url>
                                         <db.username>${oracle.database.username}</db.username>
                                         <db.password>${oracle.database.password}</db.password>
+                                    </systemPropertyVariables>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>integration-test-sqlserver</id>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                </goals>
+                                <configuration>
+                                    <systemPropertyVariables>
+                                        <db.driver>${sqlserver.database.driver}</db.driver>
+                                        <db.url>${sqlserver.database.url}</db.url>
+                                        <db.username>${sqlserver.database.username}</db.username>
+                                        <db.password>${sqlserver.database.password}</db.password>
                                     </systemPropertyVariables>
                                 </configuration>
                             </execution>
