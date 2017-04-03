@@ -15,18 +15,6 @@
  */
 package org.modeshape.test.integration;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Random;
-import javax.annotation.Resource;
-import javax.jcr.Binary;
-import javax.jcr.Node;
-import javax.jcr.PathNotFoundException;
-import javax.jcr.RepositoryException;
-import javax.jcr.Session;
-import javax.jcr.query.Query;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -39,10 +27,16 @@ import org.modeshape.jcr.JcrRepository;
 import org.modeshape.jcr.api.JcrTools;
 import org.modeshape.schematic.document.Document;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import javax.annotation.Resource;
+import javax.jcr.*;
+import javax.jcr.query.Query;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Random;
+
+import static org.junit.Assert.*;
 
 /**
  * Smoke tests persistence in a repository that store all its information in a Database
