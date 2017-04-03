@@ -16,11 +16,7 @@
 
 package org.modeshape.jcr.index.local;
 
-import java.io.File;
-import java.nio.file.Paths;
-import javax.jcr.RepositoryException;
-import org.mapdb.DB;
-import org.mapdb.DBMaker;
+import org.mapdb.*;
 import org.modeshape.common.collection.Problems;
 import org.modeshape.jcr.ExecutionContext;
 import org.modeshape.jcr.JcrI18n;
@@ -37,6 +33,11 @@ import org.modeshape.jcr.spi.index.IndexCostCalculator;
 import org.modeshape.jcr.spi.index.provider.IndexProvider;
 import org.modeshape.jcr.spi.index.provider.IndexUsage;
 import org.modeshape.jcr.spi.index.provider.ManagedIndexBuilder;
+
+import javax.jcr.RepositoryException;
+import java.io.File;
+import java.nio.file.Paths;
+import java.util.Set;
 
 /**
  * An {@link IndexProvider} implementation that maintains indexes on the local file system using MapDB.
@@ -168,11 +169,57 @@ public class LocalIndexProvider extends IndexProvider {
         }
         // we always want to have the close via the shutdown hook; it should be idempotent
         dbMaker.closeOnJvmShutdown();
-        this.db = dbMaker.make();
+        this.db = make(dbMaker);
         this.indexUpdater = new IndexUpdater(db);
         
         logger().trace("Found the index files {0} in index database for repository '{1}' at: {2}", db.getCatalog(),
                        getRepositoryName(), file.getAbsolutePath());
+    }
+
+    public DB make(DBMaker dbMaker) {
+        Engine engine = dbMaker.makeEngine();
+        boolean dbCreated = false;
+
+        DB var5;
+        try {
+            DB db = new DB(engine, false, false) {
+
+                @Override
+                public synchronized <K> Set<K> getHashSet(String name) {
+                    this.checkNotClosed();
+                    Set ret = (Set)this.getFromWeakCollection(name);
+                    if(ret != null) {
+                        return ret;
+                    } else {
+                        String type = (String)this.catGet(name + ".type", (Object)null);
+                        if(type == null) {
+                            this.checkShouldCreate(name);
+                            if(this.engine.isReadOnly()) {
+                                StoreHeap e = new StoreHeap();
+                                (new DB(e)).getHashSet("a");
+                                return null;
+                            } else {
+                                return this.createHashSet(name).counterEnable().makeOrGet();
+                            }
+                        } else {
+                            this.checkType(type, "HashSet");
+                            ret = (new HTreeMap(this.engine, ((Long)this.catGet(name + ".counterRecid")).longValue(), ((Integer)this.catGet(name + ".hashSalt")).intValue(), (long[])((long[])this.catGet(name + ".segmentRecids")), (Serializer)this.catGet(name + ".serializer", this.getDefaultSerializer()), (Serializer)null, ((Long)this.catGet(name + ".expireTimeStart", Long.valueOf(0L))).longValue(), ((Long)this.catGet(name + ".expire", Long.valueOf(0L))).longValue(), ((Long)this.catGet(name + ".expireAccess", Long.valueOf(0L))).longValue(), ((Long)this.catGet(name + ".expireMaxSize", Long.valueOf(0L))).longValue(), ((Long)this.catGet(name + ".expireStoreSize", Long.valueOf(0L))).longValue(), (long[])((long[])this.catGet(name + ".expireHeads", (Object)null)), (long[])((long[])this.catGet(name + ".expireTails", (Object)null)), (Fun.Function1)null, (Hasher)this.catGet(name + ".hasher", Hasher.BASIC), false)).keySet();
+                            this.namedPut(name, ret);
+                            return ret;
+                        }
+                    }
+                }
+            };
+            dbCreated = true;
+            var5 = db;
+        } finally {
+            if(!dbCreated) {
+                engine.close();
+            }
+
+        }
+
+        return var5;
     }
 
     @Override
